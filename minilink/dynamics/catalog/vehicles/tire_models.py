@@ -91,9 +91,11 @@ class Pacejka(TireModel):
         Cy=1.3,
         Dy=1.0,
         Ey=0.97,
-        # logs=False,
+        combined_slip_mode=None,
     ):
         super().__init__()
+        self.combined_slip_mode = combined_slip_mode
+
         self.Bx, self.Cx, self.Dx, self.Ex = Bx, Cx, Dx, Ex
         self.By, self.Cy, self.Dy, self.Ey = By, Cy, Dy, Ey
 
@@ -192,7 +194,9 @@ class Pacejka(TireModel):
         Fx = mf(kappa, self.Bx, self.Cx, self.Dx, self.Ex, Fz)
         Fy = mf(alpha, self.By, self.Cy, self.Dy, self.Ey, Fz)
 
-        Fx, Fy = self.combined_slip(Fx, Fy, kappa, alpha, Fz, mode=None)
+        Fx, Fy = self.combined_slip(
+            Fx, Fy, kappa, alpha, Fz, mode=self.combined_slip_mode
+        )
 
         # ==================================================================================== ENLEVER ====================================================================================
         if logs:

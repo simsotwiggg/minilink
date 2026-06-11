@@ -1,192 +1,342 @@
+import math
+
 import matplotlib.pyplot as plt
 import numpy as np
-from matplotlib.animation import FuncAnimation
 
-from minilink.core.system import System
-from minilink.graphical.animation.primitives import CustomLine
-from minilink.simulations_bicycle_model.path.bicycle_path3 import Ellipse
+from minilink.control.constant_ref import ConstantReference
+from minilink.control.full_bicycle_meas import BicycleMeasurement
+from minilink.control.generic_pid import PID, Sum
+from minilink.control.motor_map import AccToRearForce, ThrMap
+from minilink.control.steering_map import AngularSpeedToSteeringMap
+from minilink.core.diagram import DiagramSystem
+from minilink.core.system import DynamicSystem, System
+from minilink.dynamics.catalog.vehicles.dynamic_bicycle import (
+    DynamicBicycleRearWheelDriveEngine,
+)
+from minilink.simulations_bicycle_model.path.path_plotter import Lines
+from minilink.simulations_bicycle_model.traj.LOS_modified import (
+    Los,
+    # make_rounded_path_from_points,
+    # make_rounded_rectangle_path,
+)
+from minilink.simulations_bicycle_model.traj.path_segments import (
+    make_rectangle_path,
+    make_rounded_rectangle_from_path,
+)
+from minilink.simulations_bicycle_model.vehicule_helper import (
+    attach_vehicle_centered_diagram_camera,
+    create_vehicle,
+)
 
 
-class PointOnEllipse(System):
+def wrap_pi(angle):
+    """
+    Ramène un angle dans [-pi, pi].
+    Remplace simpleSpeedBoatSim._wrap_pi si non disponible.
+    """
+    return (angle + math.pi) % (2.0 * math.pi) - math.pi
+
+
+class PIDTheta(DynamicSystem):
+    """PID Generic"""
+
     def __init__(
         self,
-        ellipse: Ellipse,
-        speed: float = 1.0,
-        theta0: float = 0.0,
+        Kp: float = 1.0,
+        Ki: float = 0.0,
+        Kd: float = 0.0,
+        tau: float = 0.1,
+        meas0: float = 0.0,
+        cmd_min: float = -np.inf,
+        cmd_max: float = np.inf,
+        i_min: float = -np.inf,
+        i_max: float = np.inf,
+        name: str = "PID",
     ):
-        super().__init__(0)
+        super().__init__(2)
+        self.name = name
 
-        self.name = "Point moving on ellipse"
+        self.params = {
+            "Kp": Kp,
+            "Ki": Ki,
+            "Kd": Kd,
+            "tau": tau,
+            "cmd_min": cmd_min,
+            "cmd_max": cmd_max,
+            "i_min": i_min,
+            "i_max": i_max,
+        }
+        self.state.labels = ["int_e", "meas_filt"]
+        self.x0 = np.array([0.0, meas0], dtype=float)
 
-        self.ellipse = ellipse
-        self.speed = speed
+        self.inputs = {}
+        self.add_input_port("ref", nominal_value=np.array([0.0]))
+        self.add_input_port("meas", nominal_value=np.array([0.0]))
 
-        self.theta = theta0
-        self.t_previous = None
-
-        self.add_output_port("position", dim=2, function=self.position, dependencies=())
-
-    def path_direction(self, theta):
-        """
-        Returns the local unit tangent direction of the ellipse.
-
-        Ellipse:
-            x = x0 + a cos(theta)
-            y = y0 + b sin(theta)
-
-        Tangent:
-            dx/dtheta = -a sin(theta)
-            dy/dtheta =  b cos(theta)
-        """
-
-        a = self.ellipse.a
-        b = self.ellipse.b
-
-        tangent = np.array(
-            [
-                -a * np.sin(theta),
-                b * np.cos(theta),
-            ],
-            dtype=float,
+        self.outputs = {}
+        self.add_output_port(
+            "cmd",
+            dim=1,
+            function=self.h_w,
+            dependencies=["ref", "meas"],
+        )
+        # self.add_output_port(1, "x", function=self.compute_state, dependencies=[])
+        self.add_output_port(
+            "logs",
+            dim=2,
+            function=self.data_signal,
+            dependencies=["ref", "meas"],
         )
 
-        tangent_norm = np.linalg.norm(tangent)
-
-        if tangent_norm <= 0.0:
-            raise ValueError("Ellipse tangent norm is zero.")
-
-        return tangent / tangent_norm
-
-    def position_from_theta(self, theta):
-        """
-        Returns the point position on the ellipse for a given theta.
-        """
-
-        a = self.ellipse.a
-        b = self.ellipse.b
-        x0 = self.ellipse.x0
-        y0 = self.ellipse.y0
-
-        return np.array(
-            [
-                x0 + a * np.cos(theta),
-                y0 + b * np.sin(theta),
-            ],
-            dtype=float,
+        self.add_output_port(
+            "pid_int_value",
+            dim=3,
+            function=self.int_vars,
+            dependencies=[],
         )
 
-    def position(self, x, u, t=0.0, params=None):
-        """
-        Returns the moving point position at time t.
+    def data_signal(self, x, u, t=0.0, params=None):
+        ref = float(u[0])
+        meas = float(u[1])
+        return np.array([ref, meas], dtype=float)
 
-        Constant physical speed condition:
+    def f(self, x, u, t=0.0, params=None):
+        p = self.params if params is None else params
+        int_e, meas_filt = float(x[0]), float(x[1])
+        ref, meas = float(u[0]), float(u[1])
 
-            ||dp/dt|| = speed
+        e = wrap_pi(ref - meas)
+        tau = max(p["tau"], 1e-3)
+        # Dirty derivative on measurement
+        d_meas_filt = (meas - meas_filt) / tau
 
-        Since:
+        # Integrator with simple clamp protection.
+        d_int_e = e
 
-            dp/dt = dp/dtheta * dtheta/dt
+        # e' = ref' - meas'
+        # Si ref' ~= 0; il faut que ref change lentement.
+        # e' = 0 - meas' = -meas'
+        cmd = p["Kp"] * e + p["Ki"] * int_e - p["Kd"] * d_meas_filt
+        stop_hi = (cmd >= p["cmd_max"]) and (e > 0)
+        stop_lo = (cmd <= p["cmd_min"]) and (e < 0)
 
-        then:
+        d_int_e = 0.0 if (stop_hi or stop_lo) else e
 
-            dtheta/dt = speed / ||dp/dtheta||
-        """
+        if int_e >= p["i_max"] and e > 0.0:
+            d_int_e = 0.0
+        elif int_e <= p["i_min"] and e < 0.0:
+            d_int_e = 0.0
 
-        if self.t_previous is None:
-            self.t_previous = t
+        return np.array([d_int_e, d_meas_filt], dtype=float)
 
-        dt = t - self.t_previous
-        self.t_previous = t
+    def h_w(self, x, u, t=0.0, params=None):
+        p = self.params if params is None else params
+        int_e, meas_filt = float(x[0]), float(x[1])
+        ref, meas = float(u[0]), float(u[1])
 
-        if dt < 0.0:
-            dt = 0.0
+        e = wrap_pi(ref - meas)
 
-        a = self.ellipse.a
-        b = self.ellipse.b
+        tau = max(p["tau"], 1e-3)
+        d_filt = (meas - meas_filt) / tau
 
-        dx_dtheta = -a * np.sin(self.theta)
-        dy_dtheta = b * np.cos(self.theta)
+        cmd = p["Kp"] * e + p["Ki"] * int_e - p["Kd"] * d_filt
 
-        tangent_norm = np.sqrt(dx_dtheta**2 + dy_dtheta**2)
+        cmd = np.clip(cmd, p["cmd_min"], p["cmd_max"])
 
-        if tangent_norm <= 0.0:
-            raise ValueError("Ellipse tangent norm is zero.")
+        return np.array([cmd], dtype=float)
 
-        dtheta_dt = self.speed / tangent_norm
+    def int_vars(self, x, u, t=0.0, params=None):
+        p = self.params if params is None else params
+        int_e, meas_filt = float(x[0]), float(x[1])
+        ref, meas = float(u[0]), float(u[1])
 
-        self.theta += dtheta_dt * dt
-        self.theta = self.theta % (2.0 * np.pi)
+        e = ref - meas
 
-        return self.position_from_theta(self.theta)
+        tau = max(p["tau"], 1e-3)
+        d_filt = (meas - meas_filt) / tau
 
-    def get_kinematic_transforms(self, x, u, t):
-        pos = self.position(x, u, t)
+        cmd = p["Kp"] * e + p["Ki"] * int_e - p["Kd"] * d_filt
 
-        T = np.eye(4)
-        T[0, 3] = pos[0]
-        T[1, 3] = pos[1]
+        cmd = np.clip(cmd, p["cmd_min"], p["cmd_max"])
 
-        return [T]
+        return np.array([e, d_filt, int_e], dtype=float)
+
+    def get_kinematic_geometry(self):
+        return []
+
+    def get_kinematic_transforms(self, _x, _u, _t):
+        return []
+
+
+def create_diagram(vehicle: DynamicBicycleRearWheelDriveEngine, vx_ref=1.0):
+
+    path_raw = make_rectangle_path(Lx=40.0, Ly=20.0)
+    path_raw_lines = Lines(pts=path_raw, name="Raw path", color="green", linewidth=1)
+
+    # Rounded rectangle generated FROM the raw rectangle
+    path = make_rounded_rectangle_from_path(
+        path_raw,
+        R=7.0,
+        nseg=8,
+        narc=4,
+        min_ds=0.1,
+        closed=True,
+    )
+
+    los_path = Lines(pts=path, name="Los path", color="blue")
+
+    los_system = Los(
+        path_pts=path,
+        vx_nom=vx_ref,
+        Delta=8.0,
+        omega_n=1.2,
+        control_point_ahead=vehicle.a + 0.5,
+        closed=True,
+    )
+
+    v_bicycle = ConstantReference(ref=vx_ref, name="Constant angular speed")
+
+    r_to_steering = AngularSpeedToSteeringMap(vehicle)
+
+    full_state_meas = BicycleMeasurement(name="Meas states", y_size=10)
+
+    theta_pid = PIDTheta(
+        Kp=5.0,
+        Ki=0.0,
+        Kd=0.0,
+        cmd_min=-10.0,
+        cmd_max=10.0,
+        i_min=-1.0,
+        i_max=1.0,
+        name="Yaw rate PID",
+    )
+
+    r_pid = PID(
+        Kp=0.3,
+        Ki=0.0,
+        Kd=0.1,
+        cmd_min=-np.pi / 4.0,
+        cmd_max=np.pi / 4.0,
+        i_min=-np.pi / 4.0,
+        i_max=np.pi / 4.0,
+        name="Yaw rate PID",
+    )
+
+    thr_map = ThrMap(vehicle)
+    acc_to_force = AccToRearForce(vehicle)
+
+    v_pid = PID(
+        Kp=0.8,
+        Ki=0.01,
+        Kd=0.0,
+        cmd_min=-10.0,
+        cmd_max=10.0,
+        i_min=-0.0,
+        i_max=5.0,
+        name="Speed PID",
+    )
+
+    sum_bloc = Sum(max=np.pi / 2.0, min=-np.pi / 2.0)
+
+    diagram = DiagramSystem()
+    diagram.name = "Cascade PID - DynamicBicycleRearWheelDriveEngine"
+
+    diagram.add_subsystem(r_to_steering, "r_to_steering")
+    diagram.add_subsystem(vehicle, "vehicle")
+    diagram.add_subsystem(r_pid, "r_pid")
+    diagram.add_subsystem(theta_pid, "theta_pid")
+
+    diagram.add_subsystem(acc_to_force, "acc_to_force")
+    diagram.add_subsystem(thr_map, "thr_map")
+    diagram.add_subsystem(v_pid, "v_pid")
+
+    diagram.add_subsystem(full_state_meas, "full_state_meas")
+    diagram.add_subsystem(sum_bloc, "sum_bloc")
+
+    diagram.add_subsystem(path_raw_lines, "path_raw")
+    diagram.add_subsystem(los_path, "los_path")
+    diagram.add_subsystem(los_system, "los_system")
+    diagram.add_subsystem(v_bicycle, "v_bicycle")
+
+    diagram.connect("v_bicycle", "ref", "v_pid", "ref")
+
+    diagram.connect("v_pid", "cmd", "acc_to_force", "acc_targ")
+
+    diagram.connect("los_system", "theta", "theta_pid", "ref")
+
+    diagram.connect("theta_pid", "cmd", "r_pid", "ref")
+    diagram.connect("theta_pid", "cmd", "r_to_steering", "r_targ")
+
+    diagram.connect("vehicle", "y", "full_state_meas", "y")
+    diagram.connect("full_state_meas", "vx_meas", "r_to_steering", "vx_meas")
+    diagram.connect("full_state_meas", "r_meas", "r_pid", "meas")
+    diagram.connect("full_state_meas", "vx_meas", "v_pid", "meas")
+    diagram.connect("full_state_meas", "theta_meas", "theta_pid", "meas")
+    diagram.connect("full_state_meas", "theta_meas", "los_system", "psi")
+    diagram.connect("full_state_meas", "y_meas", "los_system", "y")
+    diagram.connect("full_state_meas", "x_meas", "los_system", "x")
+
+    diagram.connect("r_pid", "cmd", "sum_bloc", "1")
+    diagram.connect("r_to_steering", "delta", "sum_bloc", "2")
+
+    diagram.connect("sum_bloc", "result", "vehicle", "delta")
+    diagram.connect("acc_to_force", "F_rear", "thr_map", "F_rear")
+    diagram.connect("thr_map", "thr", "vehicle", "thr")
+    diagram.connect("full_state_meas", "w_r_meas", "thr_map", "w_rear")
+
+    return diagram
 
 
 def main():
-    a = 1.0
-    b = 0.1
+    vx = 10.0
 
-    path = Ellipse(a=a, b=b, x0=0.0, y0=b)
+    vehicle = create_vehicle(Y=15.0, vx=vx, theta=np.pi, tire_slip_mode=None)
 
-    moving_point = PointOnEllipse(
-        ellipse=path,
-        speed=0.2,
-        theta0=0.0,
-    )
+    diagram = create_diagram(vehicle, vx_ref=vx)
 
-    geometry = path.get_kinematic_geometry()
+    # diagram.plot_diagram()
 
-    color = geometry[0].color
-    linewidth = geometry[0].linewidth
-    linestyle = geometry[0].style
+    diagram.compute_trajectory(tf=20, dt=0.005)
 
-    path_pts = geometry[0].pts
+    # traj = diagram.reconstruct_internal_signals(diagram.traj)
+    # pid_logs = traj.get_signal("los_system:logs")
 
-    x = path_pts[:, 0]
-    y = path_pts[:, 1]
+    # meas = pid_logs[0, :]
+
+    # t = traj.t
+
+    # plt.figure()
+    # plt.plot(t, meas, label="Measured Error LOS")
+    # plt.xlabel("Time [s]")
+    # plt.ylabel("Theta [rad]")
+    # plt.title("Error LOS")
+    # plt.legend()
+    # plt.grid(True)
+    # plt.show()
+
+    traj = diagram.reconstruct_internal_signals(diagram.traj)
+    pid_logs = traj.get_signal("v_pid:logs")
+
+    ref = pid_logs[0, :]
+    meas = pid_logs[1, :]
+
+    ref = np.unwrap(np.array(ref))
+
+    t = traj.t
 
     plt.figure()
-    plt.plot(
-        x,
-        y,
-        label="path",
-        color=color,
-        linewidth=linewidth,
-        linestyle=linestyle,
-    )
-
-    # Example: plot point positions over time
-    times = np.linspace(0.0, 20.0, 300)
-    point_positions = []
-
-    for t in times:
-        p = moving_point.position(None, None, t)
-        point_positions.append(p)
-
-    point_positions = np.array(point_positions)
-
-    plt.plot(
-        point_positions[:, 0],
-        point_positions[:, 1],
-        "r.",
-        markersize=3,
-        label="moving point",
-    )
-
-    plt.xlabel("X pos [m]")
-    plt.ylabel("Y pos [m]")
-    plt.title("Constant-Speed Point on Ellipse")
+    plt.plot(t, ref, label="Goal Vehicule theta")
+    plt.plot(t, meas, label="Measured Vehicule theta")
+    plt.xlabel("Time [s]")
+    plt.ylabel("Theta [rad]")
+    plt.title("Theta PID - Reference vs Measured")
     plt.legend()
     plt.grid(True)
-    plt.axis("equal")
     plt.show()
+
+    attach_vehicle_centered_diagram_camera(diagram, vehicle)
+
+    diagram.animate(renderer="matplotlib")
 
 
 if __name__ == "__main__":

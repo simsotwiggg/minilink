@@ -17,7 +17,7 @@ class RightAngle(System):
         y_path_const: float = 0.0,
     ):
         super().__init__(0)
-        self.name = "Horizontal line path"
+        self.name = "Right angle path"
         self.x_corner = x_corner
         self.y_path_const = y_path_const
 
@@ -28,7 +28,8 @@ class RightAngle(System):
         return np.array([self.x_corner, self.y_path_const], dtype=float)
 
     def get_kinematic_geometry(self):
-
+        _PATH_X0 = 0.0
+        _PATH_X1 = 100.0
         pts = np.array(
             [
                 [0.0, self.y_path_const, 0.0],

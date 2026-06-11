@@ -4,6 +4,8 @@ import numpy as np
 
 from minilink.dynamics.catalog.vehicles.dynamic_bicycle import (
     DynamicBicycleRearWheelDriveEngine,
+)
+from minilink.dynamics.catalog.vehicles.tire_models import (
     Pacejka,
 )
 from minilink.graphical.animation.primitives import camera_matrix
@@ -36,7 +38,7 @@ def attach_vehicle_centered_diagram_camera(
     )
 
 
-def create_vehicle(X=0.0, Y=0.0, theta=0.0, vx=0.0, vy=0.0, r=0.0):
+def create_vehicle(X=0.0, Y=0.0, theta=0.0, vx=0.0, vy=0.0, r=0.0, tire_slip_mode=None):
     vehicle = DynamicBicycleRearWheelDriveEngine()
 
     vehicle.r_f = 0.3429
@@ -65,8 +67,8 @@ def create_vehicle(X=0.0, Y=0.0, theta=0.0, vx=0.0, vy=0.0, r=0.0):
 
     vehicle.CdA = 0.0
 
-    vehicle.tire_model_f = Pacejka()
-    vehicle.tire_model_r = Pacejka()
+    vehicle.tire_model_f = Pacejka(combined_slip_mode=tire_slip_mode)
+    vehicle.tire_model_r = Pacejka(combined_slip_mode=tire_slip_mode)
 
     vehicle.engine_power_peak = 48470.5
 

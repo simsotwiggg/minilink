@@ -21,7 +21,7 @@ class BicycleMeasurement(System):
 
         self.outputs = {}
         self.add_output_port(
-            "X_meas",
+            "x_meas",
             dim=1,
             function=self.x_meas,
             dependencies=["y"],
@@ -123,5 +123,5 @@ class BicycleMeasurement(System):
     def get_kinematic_geometry(self):
         return []
 
-    def get_kinematic_transforms(self, _x, _u, _t):
+    def get_kinematic_transforms(self, x, u, t):
         return []
