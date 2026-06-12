@@ -6,6 +6,76 @@ from minilink.dynamics.catalog.vehicles.dynamic_bicycle import (
 )
 
 
+class AccToThr(System):
+    def __init__(
+        self,
+        vehicle: DynamicBicycleRearWheelDriveEngine,
+    ):
+        super().__init__()
+        self.name = "Acceleration to throttle map"
+
+        self.r_r = float(vehicle.r_r)
+        self.engine_power_peak = vehicle.engine_power_peak
+        self.transmission_ratio = vehicle.transmission_ratio
+
+        self.mass = float(vehicle.mass)
+
+        self.inputs = {}
+        self.add_input_port(
+            "acc_targ",
+            nominal_value=np.array([0.0]),
+        )
+
+        self.add_input_port(
+            "w_rear",
+            nominal_value=np.array([0.0]),
+        )
+
+        self.outputs = {}
+
+        self.add_output_port(
+            "thr",
+            dim=1,
+            function=self.h_thr,
+            dependencies=["acc_targ", "w_rear"],
+        )
+
+    def h_thr(self, x, u, t=0.0, params=None):
+        acc_targ = float(u[0])
+        w_rear = float(u[1])
+
+        F_rear = self.mass * acc_targ
+
+        # Ici j'assume que la roue ne glisse pas
+        tau_rear_required = F_rear * self.r_r
+
+        w_rear_num = max(w_rear, 1.0)
+        w_moteur = w_rear_num * self.transmission_ratio
+
+        # print(f"w_rear: {w_rear}, w_rear_num: {w_rear_num}")
+        max_engine_torque = self.engine_power_peak / w_moteur
+
+        thr = tau_rear_required / max_engine_torque
+
+        thr = np.clip(thr, 0.0, 1.0)
+
+        # print(f"thr: {thr}")
+        # print(
+        #     f"tau_rear_required: {tau_rear_required}, max_engine_torque: {max_engine_torque}rpm, thr: {thr}"
+        # )
+
+        # print(f"w_rear: {w_rear}, w_rear_num: {w_rear_num}, w_moteur: {w_moteur}")
+        # print(f"F_rear: {F_rear}")
+
+        return np.array([thr], dtype=float)
+
+    def get_kinematic_geometry(self):
+        return []
+
+    def get_kinematic_transforms(self, x, u, t):
+        return []
+
+
 class ThrMap(System):
     """Map desired rear longitudinal force to normalized throttle.
 
@@ -94,23 +164,6 @@ class ThrMap(System):
 
 
 class AccToRearForce(System):
-    """Map desired longitudinal acceleration to rear wheel longitudinal force.
-
-    Input
-    -----
-    acc
-        Desired longitudinal acceleration [m/s^2]
-
-    Output
-    ------
-    F_rear
-        Desired rear longitudinal tire force [N]
-
-    Mapping
-    -------
-    F_rear = mass * acc
-    """
-
     def __init__(
         self,
         vehicle: DynamicBicycleRearWheelDriveEngine,

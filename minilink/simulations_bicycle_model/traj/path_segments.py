@@ -17,7 +17,6 @@ def make_rectangle_path(Lx=40.0, Ly=20.0, closed=True):
         path.append(path[0])
 
     path = np.array(path, dtype=float)
-    # path_3d = np.column_stack((path, np.zeros(len(path))))
 
     return path
 
