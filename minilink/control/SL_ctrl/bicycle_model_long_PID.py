@@ -1,7 +1,7 @@
 from minilink.control.generic_pid import PID
 from minilink.control.motor_map import AccToRearForce, ThrMap
 from minilink.core.diagram import DiagramSystem
-from minilink.dynamics.catalog.vehicles.dynamic_bicycle import (
+from minilink.dynamics.catalog.vehicles.dynamic_bicycle_SL import (
     DynamicBicycleRearWheelDriveEngine,
 )
 

@@ -9,7 +9,7 @@ from minilink.control.motor_map import AccToRearForce, ThrMap
 from minilink.control.steering_map import AngularSpeedToSteeringMap
 from minilink.core.diagram import DiagramSystem
 from minilink.core.system import System
-from minilink.dynamics.catalog.vehicles.dynamic_bicycle import (
+from minilink.dynamics.catalog.vehicles.dynamic_bicycle_SL import (
     DynamicBicycleRearWheelDriveEngine,
 )
 from minilink.graphical.animation.primitives import (

@@ -9,7 +9,7 @@ from minilink.control.generic_pid import PID
 from minilink.control.motor_map import AccToThr
 from minilink.control.steering_map import AngularSpeedToSteeringMap
 from minilink.core.diagram import DiagramSystem
-from minilink.dynamics.catalog.vehicles.dynamic_bicycle import (
+from minilink.dynamics.catalog.vehicles.dynamic_bicycle_SL import (
     DynamicBicycleRearWheelDriveEngine,
 )
 from minilink.simulations_bicycle_model.path.path_plotter import Lines

@@ -1,12 +1,12 @@
 import unittest
 
 import numpy as np
-
 from minilink.dynamics.catalog.vehicles.dynamic_bicycle import (
     DynamicBicycle,
     DynamicBicycleCar3D,
     DynamicBicycleCar3DRealistic,
 )
+
 from minilink.graphical.animation.primitives import ExtrudedPolygon
 
 

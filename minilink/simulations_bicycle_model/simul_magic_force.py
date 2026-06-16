@@ -5,7 +5,7 @@ reference ``u_ref``. No path tracking, no heading loop, no yaw-rate loop.
 
 Run from repo root::
 
-    conda run -n dev-h26 python examples/scripts/diagrams/demo_dynamic_bicycle_velocity_pid.py
+    conda run -n dev-h26 python examples/scripts/diagrams/demo_dynamic_bicycle_SL_velocity_pid.py
 """
 
 import types
@@ -14,7 +14,7 @@ import numpy as np
 
 from minilink.core.diagram import DiagramSystem
 from minilink.core.system import DynamicSystem, System
-from minilink.dynamics.catalog.vehicles.dynamic_bicycle import (
+from minilink.dynamics.catalog.vehicles.dynamic_bicycle_SL import (
     DynamicBicycleMagicForces,
     Pacejka,
 )

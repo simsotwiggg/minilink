@@ -8,13 +8,13 @@ import pytest
 try:
     import jax
     import jax.numpy as jnp
-
-    from minilink.compile.jax_utils import configure_jax
-    from minilink.core.costs import QuadraticCost
     from minilink.dynamics.catalog.vehicles.dynamic_bicycle import (
         DynamicBicycle,
         JaxDynamicBicycle,
     )
+
+    from minilink.compile.jax_utils import configure_jax
+    from minilink.core.costs import QuadraticCost
     from minilink.planning.problems import PlanningProblem
     from minilink.planning.trajectory_optimization.direct_collocation import (
         DirectCollocationOptions,

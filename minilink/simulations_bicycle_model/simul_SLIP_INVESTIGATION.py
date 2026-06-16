@@ -75,6 +75,11 @@ class ConstantVehicleInput(System):
 def main():
     vehicle = create_vehicle()
 
+    from minilink.dynamics.catalog.vehicles.tire_models_archive_W_logs import Pacejka
+
+    vehicle.tire_model_f = Pacejka()
+    vehicle.tire_model_r = Pacejka()
+
     initial_vx = 1.0
     initial_wr = -1.0
 

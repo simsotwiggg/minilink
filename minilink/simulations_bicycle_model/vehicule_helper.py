@@ -2,7 +2,7 @@ import types
 
 import numpy as np
 
-from minilink.dynamics.catalog.vehicles.dynamic_bicycle import (
+from minilink.dynamics.catalog.vehicles.dynamic_bicycle_SL import (
     DynamicBicycleRearWheelDriveEngine,
 )
 from minilink.dynamics.catalog.vehicles.tire_models import (

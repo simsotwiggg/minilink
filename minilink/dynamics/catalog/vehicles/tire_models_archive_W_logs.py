@@ -1,42 +1,55 @@
 import numpy as np
 
+from minilink.dynamics.catalog.vehicles.tire_models import TireModel
 
-class TireModel:
-    """Base Strategy for Tire-Road Interaction"""
+# class TireModel:
+#     """Base Strategy for Tire-Road Interaction"""
 
-    def __init__(self):
-        self.v_min_epsilon = 0.1
+#     def __init__(self):
+#         self.v_min_epsilon = 0.1
 
-    def vel2slip(self, vx, vy, w, R):
-        """Compute longitudinal and lateral slip"""
+#         # self.logs = logs
 
-        # Autre definition de slip qui pourrait etre utilise
+#     def vel2slip(self, vx, vy, w, R):
+#         """Compute longitudinal and lateral slip"""
 
-        # Adjusted longitudinal velocity to avoid division by zero
-        # vx_adj = np.abs(vx) + self.v_min_epsilon
-        # Longitudinal slip ratio (kappa)
-        # kappa = (w * R - vx) / vx_adj
-        # Lateral slip angle (alpha)
-        # alpha = -np.arctan(vy / vx_adj)
-        # alpha = -np.arctan2(vy, vx_adj)
+#         # Autre ddefinition de slip qui pourrait etre utilise
 
-        wr = w * R
-        denom = np.maximum(np.maximum(np.abs(vx), np.abs(wr)), self.v_min_epsilon)
+#         # Adjusted longitudinal velocity to avoid division by zero
+#         # vx_adj = np.abs(vx) + self.v_min_epsilon
+#         # Longitudinal slip ratio (kappa)
+#         # kappa = (w * R - vx) / vx_adj
+#         # Lateral slip angle (alpha)
+#         # alpha = -np.arctan(vy / vx_adj)
+#         # alpha = -np.arctan2(vy, vx_adj)
 
-        alpha = -np.arctan2(vy, np.maximum(np.abs(vx), self.v_min_epsilon))
+#         wr = w * R
+#         denom = np.maximum(np.maximum(np.abs(vx), np.abs(wr)), self.v_min_epsilon)
 
-        kappa = (wr - vx) / denom
+#         alpha = -np.arctan2(vy, np.maximum(np.abs(vx), self.v_min_epsilon))
 
-        return alpha, kappa
+#         kappa = (wr - vx) / denom
 
-    def slip2forces(self, alpha, kappa, Fz):
-        """Convert slip values to forces using the tire model"""
-        raise NotImplementedError
+#         # if self.logs:
+#         # if np.abs(kappa) > 1.0:
+#         #     print(
+#         #         f"WARNING: |kappa| > 1 -> vx={vx:.2f}, wr={wr:.2f}, w={w:.2f}, kappa={kappa:.4f}"
+#         #     )
+#         #     # if np.abs(alpha) > np.pi / 2:
+#         #     #     print(
+#         #     #         f"WARNING: |alpha| > pi/2 -> vx={vx:.2f}, vy={vy:.2f}, alpha={alpha:.4f}"
+#         #     #     )
 
-    def vel2forces(self, vx, vy, w, R, Fz):
-        """Compute forces directly from velocities"""
-        alpha, kappa = self.vel2slip(vx, vy, w, R)
-        return self.slip2forces(alpha, kappa, Fz)
+#         return alpha, kappa
+
+#     def slip2forces(self, alpha, kappa, Fz):
+#         """Convert slip values to forces using the tire model"""
+#         raise NotImplementedError
+
+#     def vel2forces(self, vx, vy, w, R, Fz):
+#         """Compute forces directly from velocities"""
+#         alpha, kappa = self.vel2slip(vx, vy, w, R)
+#         return self.slip2forces(alpha, kappa, Fz)
 
 
 class LinearTire(TireModel):
@@ -113,6 +126,13 @@ class Pacejka(TireModel):
         # Pour cosine weighting function
         self.mu = 1.0
 
+        # ==================================================================================== ENLEVER ====================================================================================
+
+        self.kappa_log = []
+        self.alpha_log = []
+        self.Fx_log = []
+        self.Fy_log = []
+
     def Gxa(self, k, a):
         B = self.r_Bx1 * np.cos(np.arctan(self.r_Bx2 * k)) * self.lambda_ya
         C = self.r_Cx1
@@ -141,13 +161,14 @@ class Pacejka(TireModel):
         mode = w -> Cosine weighting function
         mode = c -> Friction circle
         """
+
         Fx = Fx_0
         Fy = Fy_0
 
         if mode == "w":
             # TODO: Verif
-            Fx *= self.Gxa(kappa, alpha)
-            Fy *= self.Gyk(kappa, alpha)
+            Fx = Fx_0 * self.Gxa(kappa, alpha)
+            Fy = Fy_0 * self.Gyk(kappa, alpha)
         elif mode == "c":
             # Saturation circulaire simple (Friction circle)
             F_max = self.mu * Fz
@@ -160,7 +181,8 @@ class Pacejka(TireModel):
 
         return Fx, Fy
 
-    def slip2forces(self, alpha, kappa, Fz):
+    # TODO: I hate it but I need it for the slip investigation, to log the slip and forces values during the simulation
+    def slip2forces(self, alpha, kappa, Fz, logs=False):
         # Fonction magique
         def mf(x, B, C, D, E, fz):
             D_scaled = D * fz
@@ -174,6 +196,12 @@ class Pacejka(TireModel):
         Fx, Fy = self.combined_slip(
             Fx, Fy, kappa, alpha, Fz, mode=self.combined_slip_mode
         )
+
+        # ==================================================================================== ENLEVER ====================================================================================
+        self.kappa_log.append(kappa)
+        self.alpha_log.append(alpha)
+        self.Fx_log.append(Fx)
+        self.Fz = Fz
 
         return Fx, Fy
 
