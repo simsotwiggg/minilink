@@ -60,7 +60,7 @@ class PID(DynamicSystem):
             "pid_int_value",
             dim=3,
             function=self.int_vars,
-            dependencies=[],
+            dependencies=["ref", "meas", "feedfoward"],
         )
 
     def data_signal(self, x, u, t=0.0, params=None):
@@ -68,7 +68,7 @@ class PID(DynamicSystem):
         meas = float(u[1])
         return np.array([ref, meas], dtype=float)
 
-    def calculate_error(self, ref: float, meas: float) -> float:
+    def calculate_error(self, ref: float, meas: float, u) -> float:
         e = ref - meas
         return float(e)
 
@@ -84,7 +84,7 @@ class PID(DynamicSystem):
         int_e, meas_filt = float(x[0]), float(x[1])
         ref, meas, feedfoward = float(u[0]), float(u[1]), float(u[2])
 
-        e = self.calculate_error(ref, meas)
+        e = self.calculate_error(ref, meas, u)
         tau = max(p["tau"], 1e-3)
         # Dirty derivative on measurement
         d_meas_filt = (meas - meas_filt) / tau
@@ -113,7 +113,7 @@ class PID(DynamicSystem):
         int_e, meas_filt = float(x[0]), float(x[1])
         ref, meas, feedfoward = float(u[0]), float(u[1]), float(u[2])
 
-        e = self.calculate_error(ref, meas)
+        e = self.calculate_error(ref, meas, u)
 
         tau = max(p["tau"], 1e-3)
         d_filt = (meas - meas_filt) / tau
@@ -129,7 +129,7 @@ class PID(DynamicSystem):
         int_e, meas_filt = float(x[0]), float(x[1])
         ref, meas, feedfoward = float(u[0]), float(u[1]), float(u[2])
 
-        e = self.calculate_error(ref, meas)
+        e = self.calculate_error(ref, meas, u)
 
         tau = max(p["tau"], 1e-3)
         d_filt = (meas - meas_filt) / tau

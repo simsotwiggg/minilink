@@ -42,14 +42,14 @@ class BicycleMeasurement(System):
         )
 
         self.add_output_port(
-            "vx_meas",
+            "u_meas",
             dim=1,
             function=self.vx_meas,
             dependencies=["y"],
         )
 
         self.add_output_port(
-            "vy_meas",
+            "v_meas",
             dim=1,
             function=self.vy_meas,
             dependencies=["y"],

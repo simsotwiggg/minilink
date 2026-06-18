@@ -12,7 +12,6 @@ from minilink.planning.trajectory_optimization.planner import (
     TrajectoryOptimizationPlanner,
 )
 
-
 # --- Problem setup ---
 PRINT_SOLVE_REPORT = True  # Print the Minilink TrajOpt pre/post solve report.
 PRINT_RESULT_SUMMARY = not PRINT_SOLVE_REPORT  # Print compact success/cost fallback.
@@ -49,6 +48,9 @@ cost = QuadraticCost.from_system(
     xbar=x_ref,
     ubar=ubar,
 )
+
+print(f"Cost: {cost}")
+
 problem = PlanningProblem(
     sys=sys,
     x_start=x_start,

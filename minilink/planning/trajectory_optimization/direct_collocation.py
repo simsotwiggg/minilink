@@ -238,7 +238,9 @@ class DirectCollocationTranscription(Transcription):
         """Return the collocation time grid."""
         return self.options.t
 
-    def decision_bounds(self, problem: PlanningProblem) -> tuple[np.ndarray, np.ndarray]:
+    def decision_bounds(
+        self, problem: PlanningProblem
+    ) -> tuple[np.ndarray, np.ndarray]:
         """Build box bounds on the packed decision vector when sets expose boxes."""
         n = int(problem.sys.n)
         n_steps = self.options.n_steps

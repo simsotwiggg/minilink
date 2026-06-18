@@ -40,6 +40,9 @@ sys.inputs["w_rear"].upper_bound[0] = W_REAR_MAX
 sys.inputs["delta"].lower_bound[0] = -DELTA_MAX
 sys.inputs["delta"].upper_bound[0] = DELTA_MAX
 
+# sys.state.labels = ["x", "y", "theta", "u", "v", "r"]
+
+
 x_start = np.array([0.0, 0.0, 0.0, U_TARGET, 0.0, 0.0])
 # Reference state used by the running and terminal cost. The lane change is
 # encouraged by the cost, not enforced by an equality terminal set.

@@ -13,7 +13,7 @@ from minilink.dynamics.catalog.vehicles.dynamic_bicycle_SL import (
     DynamicBicycleRearWheelDriveEngine,
 )
 from minilink.simulations_bicycle_model.path.path_plotter import Lines
-from minilink.simulations_bicycle_model.traj.LOS_modified import Los
+from minilink.simulations_bicycle_model.traj.LOS_modified import LosSL
 from minilink.simulations_bicycle_model.traj.path_segments import (
     make_rectangle_path,
     make_rounded_rectangle_from_path,
@@ -33,12 +33,38 @@ def wrap_pi(angle):
 
 
 class PIDTheta(PID):
-    def calculate_error(self, ref: float, meas: float) -> float:
-        e = wrap_pi(ref - meas)
+    def __init__(
+        self,
+        Kp: float = 1,
+        Ki: float = 0,
+        Kd: float = 0,
+        tau: float = 0.1,
+        meas0: float = 0,
+        cmd_min: float = -np.inf,
+        cmd_max: float = np.inf,
+        i_min: float = -np.inf,
+        i_max: float = np.inf,
+        name: str = "PID",
+    ):
+        super().__init__(Kp, Ki, Kd, tau, meas0, cmd_min, cmd_max, i_min, i_max, name)
+
+        self.add_input_port("u_meas", nominal_value=np.array([0.0]))
+        self.add_input_port("v_meas", nominal_value=np.array([0.0]))
+
+    def calculate_error(self, ref: float, meas: float, u) -> float:
+        u_body = u[3]
+        v_body = u[4]
+
+        beta = math.atan2(v_body, max(1e-6, u_body))
+        chi_meas = wrap_pi(meas + beta)
+        # print(f"beta: {beta}, meas: {meas}")
+
+        e = wrap_pi(ref - chi_meas)
         return float(e)
 
 
-path_raw = make_rectangle_path(Lx=40.0, Ly=20.0)
+path_raw = make_rectangle_path(Lx=25.0, Ly=20.0)
+
 # Rounded rectangle generated FROM the raw rectangle
 path = make_rounded_rectangle_from_path(
     path_raw,
@@ -56,7 +82,7 @@ def create_diagram(vehicle: DynamicBicycleRearWheelDriveEngine, vx_ref=1.0):
 
     los_path = Lines(pts=path, name="Los path", color="salmon")
 
-    los_system = Los(
+    los_system = LosSL(
         path_pts=path,
         vx_nom=vx_ref,
         Delta=8.0,
@@ -79,7 +105,7 @@ def create_diagram(vehicle: DynamicBicycleRearWheelDriveEngine, vx_ref=1.0):
         cmd_max=10.0,
         i_min=-1.0,
         i_max=1.0,
-        name="Yaw rate PID",
+        name="Yaw PID",
     )
 
     r_pid = PID(
@@ -139,6 +165,8 @@ def create_diagram(vehicle: DynamicBicycleRearWheelDriveEngine, vx_ref=1.0):
     diagram.connect("full_state_meas", "theta_meas", "los_system", "psi")
     diagram.connect("full_state_meas", "y_meas", "los_system", "y")
     diagram.connect("full_state_meas", "x_meas", "los_system", "x")
+    diagram.connect("full_state_meas", "u_meas", "theta_pid", "u_meas")
+    diagram.connect("full_state_meas", "v_meas", "theta_pid", "v_meas")
 
     diagram.connect("r_to_steering", "delta", "r_pid", "feedfoward")
 
@@ -167,7 +195,7 @@ def main():
     y0 = float(vehicle.x0[1])
     theta0 = float(vehicle.x0[2])
 
-    los_system = Los(
+    los_system = LosSL(
         path_pts=path,
         Delta=8.0,
         omega_n=1.2,
@@ -278,26 +306,26 @@ def main():
 
     plt.xlabel("X [m]")
     plt.ylabel("Y [m]")
-    plt.title("LOS V1 control point trajectory over time PAS DE COUPLAGE")
+    plt.title("LOS V1 control point trajectory over time NO COUPLING")
     plt.legend()
     plt.grid(True)
     plt.axis("equal")
     plt.show()
 
-    # PID PLOTS
+    # # PID PLOTS
     traj = diagram.reconstruct_internal_signals(diagram.traj)
-    pid_logs = traj.get_signal("theta_pid:logs")
+    pid_logs = traj.get_signal("theta_pid:pid_int_value")
 
-    ref = pid_logs[0, :]
-    meas = pid_logs[1, :]
+    error = pid_logs[0, :]
+    # meas = pid_logs[1, :]
 
-    ref = np.unwrap(np.array(ref))
+    # ref = np.unwrap(np.array(error))
 
     t = traj.t
 
     plt.figure()
-    plt.plot(t, ref, label="Goal Vehicule theta")
-    plt.plot(t, meas, label="Measured Vehicule theta")
+    plt.plot(t, error, label="Goal Vehicule theta")
+    # plt.plot(t, meas, label="Measured Vehicule theta")
     plt.xlabel("Time [s]")
     plt.ylabel("Theta [rad]")
     plt.title("Theta PID - Reference vs Measured")
