@@ -9,14 +9,6 @@ import matplotlib.patches as patches
 import matplotlib.pyplot as plt
 import numpy as np
 
-from minilink.graphical.common.environment import is_blocking_needed
-from minilink.graphical.common.matplotlib_style import (
-    DPI_EXPORT,
-    DPI_FIGURE,
-    FIGSIZE_ANIMATION,
-    FONT_SIZE,
-    style_animation_axes,
-)
 from minilink.graphical.animation.primitives import (
     Arrow,
     Box,
@@ -27,11 +19,21 @@ from minilink.graphical.animation.primitives import (
     Point,
     Rod,
     Sphere,
+    HorizonPolyline,
     TorqueArrow,
+    TrajectoryPolyline,
     extract_amplitude,
     world_to_camera,
 )
 from minilink.graphical.animation.renderers.renderer import AnimationRenderer
+from minilink.graphical.common.environment import is_blocking_needed
+from minilink.graphical.common.matplotlib_style import (
+    DPI_EXPORT,
+    DPI_FIGURE,
+    FIGSIZE_ANIMATION,
+    FONT_SIZE,
+    style_animation_axes,
+)
 
 _AXIS_LABEL_BY_INDEX = ("X", "Y", "Z")
 
@@ -166,30 +168,40 @@ class MatplotlibCanvas:
                 )
             self.drawn_objects.append(obj)
 
-        elif isinstance(primitive, TorqueArrow):
-            sweep, T_rigid = extract_amplitude(transform_matrix)
-            local_pts = primitive.compute_pts(sweep)
+        elif isinstance(primitive, (TorqueArrow, HorizonPolyline, TrajectoryPolyline)):
+            channel, T_rigid = extract_amplitude(transform_matrix)
+            local_pts = primitive.compute_pts(channel)
             local_pts_hom = np.hstack((local_pts, np.ones((local_pts.shape[0], 1))))
             world_pts = (T_rigid @ local_pts_hom.T).T
 
-            arc_n = local_pts.shape[0] - 3
-            if arc_n >= 2:
-                (arc_obj,) = self.ax.plot(
-                    world_pts[:arc_n, 0],
-                    world_pts[:arc_n, 1],
+            if isinstance(primitive, TorqueArrow):
+                arc_n = local_pts.shape[0] - 3
+                if arc_n >= 2:
+                    (arc_obj,) = self.ax.plot(
+                        world_pts[:arc_n, 0],
+                        world_pts[:arc_n, 1],
+                        color=primitive.color,
+                        linewidth=primitive.linewidth,
+                        linestyle=primitive.style,
+                    )
+                    self.drawn_objects.append(arc_obj)
+                    (head_obj,) = self.ax.plot(
+                        world_pts[arc_n:, 0],
+                        world_pts[arc_n:, 1],
+                        color=primitive.color,
+                        linewidth=primitive.linewidth,
+                        linestyle="-",
+                    )
+                    self.drawn_objects.append(head_obj)
+            elif local_pts.shape[0] >= 2:
+                (obj,) = self.ax.plot(
+                    world_pts[:, 0],
+                    world_pts[:, 1],
                     color=primitive.color,
                     linewidth=primitive.linewidth,
                     linestyle=primitive.style,
                 )
-                self.drawn_objects.append(arc_obj)
-                (head_obj,) = self.ax.plot(
-                    world_pts[arc_n:, 0],
-                    world_pts[arc_n:, 1],
-                    color=primitive.color,
-                    linewidth=primitive.linewidth,
-                    linestyle="-",
-                )
-                self.drawn_objects.append(head_obj)
+                self.drawn_objects.append(obj)
 
         elif isinstance(primitive, Circle):
             local_center = np.zeros(3)
@@ -236,22 +248,45 @@ class MatplotlibCanvas:
                 self.drawn_objects.append(obj)
 
         elif isinstance(primitive, Sphere):
-            # 2D/3D fallback: draw sphere as a circle in XY.
             local_center = np.zeros(3)
             local_center[: len(primitive.center)] = primitive.center
             world_center = transform_matrix @ np.append(local_center, 1.0)
-            x, y = world_center[0], world_center[1]
-            circ = patches.Circle(
-                (x, y),
-                radius=primitive.radius,
-                ec=primitive.color,
-                fill=True,
-                fc=primitive.color,
-                alpha=float(np.clip(primitive.opacity, 0.0, 1.0)),
-                linewidth=1.5,
-            )
-            obj = self.ax.add_patch(circ)
-            self.drawn_objects.append(obj)
+            x, y, z = world_center[0], world_center[1], world_center[2]
+            alpha = float(np.clip(primitive.opacity, 0.0, 1.0))
+
+            if self.is_3d:
+                # 3D: three orthogonal great circles read as a ball and scale
+                # with the data axes (Axes3D cannot draw a 2D circle patch).
+                r = primitive.radius
+                th = np.linspace(0.0, 2.0 * np.pi, 24)
+                cos, sin, zero = np.cos(th), np.sin(th), np.zeros_like(th)
+                for rx, ry, rz in (
+                    (r * cos, r * sin, zero),
+                    (r * cos, zero, r * sin),
+                    (zero, r * cos, r * sin),
+                ):
+                    (obj,) = self.ax.plot(
+                        x + rx,
+                        y + ry,
+                        z + rz,
+                        color=primitive.color,
+                        linewidth=1.0,
+                        alpha=alpha,
+                    )
+                    self.drawn_objects.append(obj)
+            else:
+                # 2D fallback: draw the sphere as a filled circle in XY.
+                circ = patches.Circle(
+                    (x, y),
+                    radius=primitive.radius,
+                    ec=primitive.color,
+                    fill=True,
+                    fc=primitive.color,
+                    alpha=alpha,
+                    linewidth=1.5,
+                )
+                obj = self.ax.add_patch(circ)
+                self.drawn_objects.append(obj)
 
         elif isinstance(primitive, Plane):
             # 2D fallback: draw XY intersection line of n·x=offset.
@@ -479,8 +514,18 @@ class MatplotlibRenderer(AnimationRenderer):
         self.ax = None
         self.canvas = None
 
-    def _build_animation(self, primitives, frames, schedule, *, is_3d: bool = False):
+    def _build_animation(
+        self,
+        primitives,
+        frames,
+        schedule,
+        *,
+        is_3d: bool = False,
+        scene_title: str | None = None,
+    ):
         fig, ax = self._create_figure_and_ax(is_3d=is_3d, camera=frames[0]["camera"])
+        if scene_title:
+            fig.suptitle(scene_title, fontsize=FONT_SIZE)
         canvas = MatplotlibCanvas(ax, is_3d=is_3d)
 
         def update(frame_idx):
@@ -548,7 +593,15 @@ class MatplotlibRenderer(AnimationRenderer):
                 print("Failed to export animation with ImageMagick as well:", e)
         plt.close(fig)
 
-    def play_native(self, primitives, frames, schedule, *, is_3d: bool):
+    def play_native(
+        self,
+        primitives,
+        frames,
+        schedule,
+        *,
+        is_3d: bool,
+        scene_title: str | None = None,
+    ):
         """
         Drive playback through ``matplotlib.animation.FuncAnimation`` instead
         of a Python frame loop.
@@ -566,7 +619,13 @@ class MatplotlibRenderer(AnimationRenderer):
           loop can drive playback without ``FuncAnimation`` being garbage
           collected.
         """
-        fig, ani = self._build_animation(primitives, frames, schedule, is_3d=is_3d)
+        fig, ani = self._build_animation(
+            primitives,
+            frames,
+            schedule,
+            is_3d=is_3d,
+            scene_title=scene_title,
+        )
         self.fig = fig
         self.ax = fig.axes[0] if fig.axes else None
         self.canvas = None

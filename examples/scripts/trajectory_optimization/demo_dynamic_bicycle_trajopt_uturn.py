@@ -37,7 +37,7 @@ Q = np.diag([0.0, 1.0, 50.0, 0.1, 0.1, 0.01])
 R = np.diag([1.0, 500.0])
 S = np.diag([0.0, 50.0, 500.0, 1.0, 1.0, 0.1])
 
-ubar = np.array([U_TARGET / sys.r_r, 0.0])
+ubar = np.array([U_TARGET / sys.params["r_r"], 0.0])
 
 
 cost = QuadraticCost.from_system(

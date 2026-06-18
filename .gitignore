@@ -37,6 +37,8 @@ minilink/_version.py
 # Output files #
 ############################
 output/
+docs/_build/
+site/
 *.html
 *.png
 *.gif
@@ -54,8 +56,6 @@ output/
 *.err
 *.msg
 *.gv
-
-
 # Claude Code #
 .claude/
 
@@ -64,6 +64,7 @@ output/
 
 # Editor Config #
 .vscode/
+.cursor/
 .spyproject/
 .spyderproject/
 

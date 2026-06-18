@@ -2,7 +2,7 @@
 
 import numpy as np
 
-from minilink.compile.jax_utils import configure_jax
+from minilink.core.backends import configure_jax
 from minilink.core.costs import QuadraticCost
 from minilink.dynamics.catalog.pendulum.cartpole import JaxCartPole
 from minilink.planning.problems import PlanningProblem
@@ -64,4 +64,8 @@ planner = TrajectoryOptimizationPlanner(
 traj = planner.compute_solution()
 
 planner.plot_solution(signals=("x", "u"))
+
 planner.problem.sys.animate(traj)
+
+# traj2 = traj.resample(n_samples=200)
+# planner.problem.sys.animate(traj2)

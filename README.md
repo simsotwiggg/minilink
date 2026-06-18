@@ -1,132 +1,383 @@
 # minilink
 
-`minilink` is a Python-native block-diagram framework for modeling,
-compiling, simulating, optimizing, and visualizing dynamical systems.
+Python-native block-diagram framework for modeling, simulating, optimizing, and
+visualizing dynamical systems.
 
 ![diagram](https://github.com/user-attachments/assets/b5c2c740-ae0b-42ab-afba-e90f2dd92a26)
 
-Colab demo: https://drive.google.com/file/d/1eMrC_8h1iZbq6lMvk4e68M6YysupJ7dg/view?usp=sharing
+Start here: [showcase notebook](examples/notebooks/demo_showcase.ipynb) ·
+[Colab demo](https://drive.google.com/file/d/1N2sxPMVqFs0HQeSpY9zdv7nvUFrfXoov/view?usp=sharing)
 
-## What It Is
+## Why minilink
 
-- **Readable dynamical systems**: write equations as `f(x, u, t, params)` and
-  outputs as `h(x, u, t, params)`.
-- **Named-port diagrams**: compose MIMO blocks with explicit input and output
-  ports.
-- **Compiled evaluators**: turn leaves and diagrams into flat NumPy or JAX
-  `DynamicsEvaluator` objects through `ExecutionPlan`.
-- **Simulation and trajectories**: use `Simulator` or `System.compute_trajectory`
-  to produce the canonical `Trajectory(t, x, u, signals)`.
-- **Optimization and planning**: describe finite-dimensional NLPs with pure
-  `MathematicalProgram` objects; trajectory optimization transcribes planning
-  problems into that same optimization layer.
-- **Visualization**: plot sampled time signals and phase-plane vector fields,
-  animate, render, and inspect diagrams through the optional graphical layer.
+Minilink is designed for dynamical-system models where the code reads as close
+as possible to textbook math. Systems are regular Python objects, equations are
+written with NumPy-style array operations, and diagrams compose plants,
+controllers, sources, and analysis blocks without a GUI or code generation step.
 
-## Quick Start
+The core idea is simple: everything is a `System`. A plant is a system, a
+controller is a system, a source block is a system, and a full diagram is also a
+system that can be simulated, plotted, compiled, or embedded in a larger model.
+
+Systems represent equations and interfaces. They do not hide the evolving
+simulation state internally; state trajectories live in simulation results.
+
+## Quick start
 
 ```python
-from minilink.core.blocks.basic import Integrator, PropController
-from minilink.core.blocks.sources import Step
-from minilink.simulation.simulator import Simulator
+from minilink.control.linear import PDController
+from minilink.dynamics.catalog.pendulum.pendulum import Pendulum
 
-diagram = Step() >> Integrator()
+controller = PDController()
+plant = Pendulum()
 
-traj = Simulator(diagram, tf=10.0).solve()
-diagram.plot_trajectory(traj, signals=("x", "u"), backend="matplotlib")
+plant.x0[0] = 2.0
+plant.params["l"] = 5.0
+plant.params["m"] = 1.0
+
+diagram = controller @ plant
+diagram.compute_trajectory(tf=10.0)
+diagram.plot_diagram()
+diagram.plot_trajectory()
+diagram.animate()
 ```
 
-Shortcuts build ordinary `DiagramSystem` objects. Use the explicit diagram API
-when the topology is not a simple series or control loop.
+## Features
+
+### Models that read like the textbook
+
+Custom dynamics subclass `DynamicSystem` and implement `f(x, u, t, params)`;
+equation code stays close to forms like `dx = A @ x + B @ u`. Use object
+defaults only when `params is None`.
 
 ```python
-diagram = Step() >> Integrator()          # series y -> u
-closed = PropController() @ Integrator()  # r/y/u closed-loop convention
-```
+import numpy as np
 
-Custom blocks declare named ports explicitly. Base `System` and `StaticSystem`
-start with no ports; `DynamicSystem` can opt into textbook `u`, `y`, and `x`
-ports through constructor options.
-
-```python
-from minilink.core.system import StaticSystem
+from minilink.blocks.sources import Step
+from minilink.core.system import DynamicSystem
 
 
-class PDController(StaticSystem):
+class MassSpringDamper(DynamicSystem):
     def __init__(self):
-        super().__init__()
-        self.params = {"kp": 10.0, "kd": 1.0}
-        self.add_input_port("r", nominal_value=0.0, labels=["reference"])
-        self.add_input_port("y", labels=["theta", "theta_dot"], units=["rad", "rad/s"])
-        self.add_output_port("u", function=self.ctl, dependencies=("r", "y"))
+        super().__init__(n=2, input_dim=1, expose_state=True)
+        self.params = {"m": 1.0, "k": 4.0, "c": 0.3}
 
-    def ctl(self, x, u, t=0.0, params=None):
-        p = self.params if params is None else params
-        r, y = self.get_port_values_from_u(u, "r", "y")
-        return [p["kp"] * (r[0] - y[0]) - p["kd"] * y[1]]
+    def f(self, x, u, t=0, params=None):
+        params = self.params if params is None else params
+        m, k, c = params["m"], params["k"], params["c"]
+
+        position, velocity = x
+        force = u[0]
+
+        dx = np.zeros(2)
+        dx[0] = velocity
+        dx[1] = (force - c * velocity - k * position) / m
+        return dx
+
+
+sys = MassSpringDamper()
+sys.x0[0] = 1.0
+
+step = Step(final_value=np.array([10.0]), step_time=2.0)
+diagram = step >> sys
+
+diagram.compute_trajectory(tf=20.0)
+diagram.plot_trajectory(signals=("x", "step:y"))
+```
+
+### Diagrams from operators
+
+Diagrams flatten subsystem states and port connections into one system-level
+interface, so a diagram can be used anywhere a system can — including inside
+another diagram.
+
+| Shortcut | Meaning |
+| --- | --- |
+| `a + b + c` | Add subsystems without wiring |
+| `source >> plant` | Chain output to input |
+| `controller @ plant` | Build a simple feedback diagram |
+| `.autowire(strict=True)` | Connect matching named ports |
+
+Explicit wiring (`add_subsystem` / `connect`) is always available when the
+shortcuts are too implicit; see
+`examples/scripts/diagrams/demo_diagram_shortcuts.py` for both versions side by
+side. Any internal signal can be plotted by `"subsystem_id:port_id"` name.
+
+### One call to simulate, plot, animate
+
+Facade methods cover the common workflows: `compute_trajectory(...)` simulates
+with SciPy or fixed-step solvers and returns a `Trajectory`;
+`plot_trajectory(...)` stacks labeled, unit-aware signal plots (matplotlib or
+plotly); `plot_phase_plane(...)` draws vector fields with overlaid
+trajectories; `plot_diagram()` renders the wiring topology (Graphviz/Mermaid).
+
+`animate()` plays a trajectory through swappable renderers: matplotlib
+(inline HTML in notebooks), plotly, meshcat (3D in the browser), or pygame.
+`game()` runs the model interactively with keyboard input — useful for
+building intuition about a plant before designing a controller.
+
+### Compiled execution and JAX
+
+Wired diagrams compile into a flat execution plan. The NumPy backend removes
+the recursive port-resolution overhead; the JAX backend JIT-compiles dynamics
+and outputs, and keeps them traceable for autodiff:
+
+```python
+evaluator = diagram.compile(backend="jax")
+dx = evaluator.f(x, u, 0.0)              # JIT-compiled flat dynamics
+
+import jax
+A = jax.jacfwd(lambda x: evaluator.f(x, u, 0.0))(x)   # exact linearization
+```
+
+### Analyze and design
+
+Characterize a plant and design a controller from the same `System`. `analysis`
+verbs return raw matrices, data, or an `LTISystem`; `control` design factories
+return ready-to-wire blocks. ``modal_analysis`` returns open-loop poles and
+mode shapes; the plant facade ``modal_analysis(..., mode=...)`` can also
+animate modes:
+
+```python
+from minilink.analysis.modal import modal_analysis
+from minilink.dynamics.catalog.pendulum.pendulum import Pendulum
+
+plant = Pendulum()
+poles, modes = modal_analysis(plant, x_bar=[0.0, 0.0])
+plant.modal_analysis(x_bar=[0.0, 0.0], mode=0)      # one mode
+plant.modal_analysis(x_bar=[0.0, 0.0], mode="all")  # every mode
+```
+
+```python
+import numpy as np
+
+from minilink.analysis.frequency import bode
+from minilink.analysis.linearize import linearize, linearize_matrices
+from minilink.control.lqr import lqr
+from minilink.core.diagram import DiagramSystem
+from minilink.dynamics.catalog.pendulum.pendulum import InvertedPendulum
+
+plant = InvertedPendulum()
+A, B, C, D = linearize_matrices(plant, x_bar=[0.0, 0.0])  # raw arrays
+lti = linearize(plant, x_bar=[0.0, 0.0])             # → LTISystem at upright
+w, mag, phase = bode(plant, x_bar=[0.0, 0.0], input_port="u", output_index=0)
+plant.plot_bode(x_bar=[0.0, 0.0], input_port="u", output_index=0)
+controller = lqr(lti.A(), lti.B(), Q=np.diag([10.0, 1.0]), R=[[1.0]])
+
+diagram = DiagramSystem()                             # full-state feedback
+diagram.add_subsystem(controller, "lqr")
+diagram.add_subsystem(plant, "plant")
+diagram.connect("plant", "x", "lqr", "x")
+diagram.connect("lqr", "u", "plant", "u")
+
+plant.x0 = np.array([0.4, 0.0])
+diagram.compute_trajectory(tf=8.0)
+diagram.plot_trajectory()
+```
+
+### Trajectory optimization
+
+Planning problems combine a system, boundary conditions, and a cost; pluggable
+transcriptions (direct collocation, single/multiple shooting) turn them into
+nonlinear programs solved by SciPy or Ipopt, optionally with JAX-exact
+gradients:
+
+```python
+import numpy as np
+
+from minilink.core.costs import QuadraticCost
+from minilink.dynamics.catalog.pendulum.cartpole import CartPole
+from minilink.planning.problems import PlanningProblem
+from minilink.planning.trajectory_optimization.direct_collocation import (
+    DirectCollocationOptions,
+    DirectCollocationTranscription,
+)
+from minilink.planning.trajectory_optimization.planner import (
+    TrajectoryOptimizationPlanner,
+)
+
+sys = CartPole()
+sys.inputs["u"].lower_bound[0] = -10.0
+sys.inputs["u"].upper_bound[0] = 10.0
+
+x_goal = np.array([0.0, np.pi, 0.0, 0.0])
+problem = PlanningProblem(
+    sys=sys,
+    x_start=np.array([-2.0, 1.0, 0.0, 0.0]),
+    x_goal=x_goal,
+    cost=QuadraticCost.from_system(sys, Q=np.diag([1.0, 1.0, 0.0, 0.0]), xbar=x_goal),
+)
+planner = TrajectoryOptimizationPlanner(
+    problem,
+    transcription=DirectCollocationTranscription(
+        DirectCollocationOptions(tf=5.0, n_steps=50)
+    ),
+)
+traj = planner.compute_solution()
+sys.animate(traj)
+```
+
+### Plant catalog
+
+Ready-to-use models under `minilink.dynamics.catalog.*`, each with parameters,
+labeled ports, and animation geometry:
+
+| Domain | Models |
+| --- | --- |
+| `pendulum` | `Pendulum`, `DoublePendulum`, `Acrobot`, `CartPole`, rotating cart-poles |
+| `manipulators` | one- to five-link arms, planar and 3D |
+| `vehicles` | kinematic and dynamic bicycle models, longitudinal propulsion, suspension |
+| `aerial` | planar drones, plane, rocket |
+| `marine` | planar boat, boat in current |
+| `mass_spring_damper` | one- to three-mass chains, floating variants |
+| `equations` | integrator chains, Van der Pol oscillator |
+
+### Symbolic mechanics (experimental)
+
+`minilink.symbolic.mechanics` derives equations of motion symbolically (SymPy,
+Lagrange or Kane) from a DH-chain description and exports the result as a
+regular minilink mechanical system — including a JAX-traceable variant.
+
+## Technology
+
+Minilink keeps the user-facing API small, while the execution path supports
+larger diagrams and repeated simulation or optimization.
+
+- **System hierarchy**: `System` is the mother class. Common subclasses include
+  `DynamicSystem`, `StaticSystem`, mechanical abstractions, source blocks,
+  controllers, catalog plants, and `DiagramSystem`.
+- **Textbook equations**: dynamic models implement `f(x, u, t, params)`, so
+  equation code can stay close to forms like `dx = A @ x + B @ u`.
+- **Stateless model objects**: a system defines equations, ports, parameters,
+  and initial conditions. The evolving state belongs to the simulator and
+  returned trajectory, not to hidden mutable block state.
+- **Composable diagrams**: diagrams flatten subsystem states and port
+  connections into one system-level interface. A diagram can be used anywhere a
+  system can.
+- **Compiled execution**: wired diagrams are converted into a flat execution
+  plan. With the JAX backend, diagram dynamics and outputs can be JIT-compiled
+  for fast simulation and optimization workflows.
+- **Layered dependencies**: NumPy is the baseline, SciPy handles common ODE
+  solvers, Matplotlib handles signal plots, Graphviz handles topology diagrams,
+  and optional layers add JAX, symbolic mechanics, animation, and Ipopt.
+
+For example, the class hierarchy can go from a generic system contract to a
+domain-specific model:
+
+```text
+System
+  -> DynamicSystem
+    -> MechanicalSystem
+      -> Pendulum
 ```
 
 ## Install
 
-Core install:
+Minilink requires Python 3.10+. Conda is recommended because diagram rendering
+and some optimization backends depend on native libraries.
 
 ```bash
-pip install minilink
+git clone https://github.com/alx87grd/minilink.git && cd minilink
+conda create -n minilink -c conda-forge python=3.10 numpy scipy matplotlib graphviz python-graphviz
+conda activate minilink
+conda env config vars set PYTHONPATH="$PWD" && conda deactivate && conda activate minilink
 ```
 
-Optional extras:
+Optional features:
 
 ```bash
-pip install "minilink[jax]"            # JAX evaluators, JIT, autodiff
-pip install "minilink[visualization]"  # meshcat / pygame renderers
-pip install "minilink[plotting]"       # Plotly signal plots and notebook renderer
-pip install "minilink[symbolic]"       # SymPy mechanics helpers
-pip install "minilink[ipopt]"          # Ipopt optimizer adapter
+conda install -c conda-forge jax jaxlib meshcat-python pygame plotly sympy ipopt cyipopt
 ```
 
-## Current Design Rules
+Alternatively, a plain editable install works in any Python 3.10+ environment
+(`pip install -e ".[dev]"`, with extras `.[jax]`, `.[symbolic]`,
+`.[visualization]`, `.[plotting]`, `.[ipopt]`).
 
-Short summary—details and edge cases are in [DESIGN.md](DESIGN.md).
+Graphviz is used by `plot_diagram()` for diagram topology rendering; it is not
+required for writing model equations.
 
-- **NumPy baseline, JAX optional**: choose backends explicitly (`compile_backend`,
-  evaluator backends); vocabulary in `minilink.compile.backend_policy`.
-- **Native-array equation paths** (`System`, ports, sets/costs, programs):
-  preserve the active backend; Python floats and forced NumPy conversion belong at
-  boundaries (evaluators, solvers, plotting, sampling helpers).
-- **Prefer one readable class** for simple algebra; optional `Jax<X>` twins only
-  when one implementation cannot stay traceable for both backends.
-- **`params is None`** uses object defaults; any other `params` value overrides—
-  never treat empty dicts as falsy for “use defaults.”
+## Call chains
 
-## Main Packages
+Minimal paths for debugging and extending workflows. Contracts:
+[DESIGN.md](DESIGN.md).
 
-- `minilink.core`: `System`, `DiagramSystem`, ports, `Trajectory`, sets, costs,
-  and basic blocks.
-- `minilink.compile`: `ExecutionPlan`, backend policy, NumPy/JAX dynamics
-  evaluators.
-- `minilink.simulation`: `Simulator`, solver backends, forced-input utilities,
-  simulation benchmarks.
-- `minilink.optimization`: pure `MathematicalProgram`, program evaluators, and
-  optimizer method presets such as `scipy_slsqp`, `scipy_trust_constr`, and
-  `ipopt`.
-- `minilink.planning`: deterministic planning problems, initial guesses, search,
-  policy synthesis, and trajectory optimization.
-- `minilink.dynamics`: reusable plant abstractions and catalog models.
-- `minilink.graphical`: time-signal, phase-plane, and diagram plotting plus
-  animation and renderer backends.
+Facade methods for common workflows: `compute_trajectory(...)`, `plot_trajectory(...)`,
+`plot_diagram(...)`, `animate(...)`. Use lower-level APIs when you need explicit
+control: `DiagramSystem.add_subsystem(...)` / `connect(...)`, `Simulator`, or
+`compile()` / `DynamicsEvaluator`.
 
-## Documentation
+### Package roles
 
-- [DESIGN.md](DESIGN.md): current architecture and public contracts.
-- [ROADMAP.md](ROADMAP.md): active priorities and subsystem maturity.
-- [agent.md](agent.md): maintainer and AI-agent contribution rules.
+| Package | Owns |
+| --- | --- |
+| `core` | `System`, `SystemFacades`, `DiagramSystem`, ports, `Trajectory`, sets, costs |
+| `blocks` | generic wiring blocks (sources, `Integrator`, `TransferFunction`, routing, nonlinear, filters) |
+| `control` | control laws and design factories (`PIDController`, `FilteredPIDController`, `ProportionalController`, `LinearStateFeedbackController`, `lqr`) |
+| `analysis` | `linearize`, `structural`, `equilibria`, `modal` (`modal_analysis`, `animate_modal`) |
+| `core/compile` | `ExecutionPlan`, `DynamicsEvaluator` |
+| `simulation` | `Simulator`, solvers, time grids |
+| `graphical` | plots, diagrams, animation (`Animator` + renderers) |
+| `planning` | `PlanningProblem`, planners, transcriptions |
+| `optimization` | `MathematicalProgram`, `Optimizer` |
 
-## Examples And Benchmarks
+### Main chains
 
-- `examples/scripts/`: runnable demos for diagrams, compilation, animation, and
-  JAX physics. See `examples/scripts/plots/demo_graphical_backends.py` for the
-  signal and diagram backend options.
-- `tests/manual/`: one-off smoke tests and exploratory checks.
-- `tests/benchmark/`: flat benchmark runners using subsystem-local benchmark
-  helpers such as `minilink.simulation.benchmark` and
-  `minilink.optimization.benchmark`.
+```text
+Model:     subclass System → f/h (+ ports or DynamicSystem options)
+
+Compose:   + / >> / @ / autowire  →  DiagramSystem
+           or add_subsystem + connect (+ connect_new_output_port)
+
+Simulate:  compute_trajectory*  →  Simulator  →  compile  →  solve  →  Trajectory
+
+Compile:   sys.compile(backend)  →  DynamicsEvaluator
+
+Plot:      plot_trajectory*  →  graphical.signals  →  PlotResult
+           plot_phase_plane* →  graphical.phase_plane
+           plot_diagram      →  graphical.diagrams (Graphviz/Mermaid)
+
+Animate:   animate* / render / game  →  Animator  →  renderer backend
+           planner.plot_solution / animate_solution  →  problem.sys.*
+
+Trajopt:   PlanningProblem + Transcription + TrajectoryOptimizationPlanner
+           → transcribe → MathematicalProgram → Optimizer → Trajectory
+
+NLP:       MathematicalProgram → Optimizer → OptimizationResult
+```
+
+- `Trajectory` is numeric only (`t`, `x`, `u`, optional `signals`); labels stay on `System`.
+- Diagram internal signals in plots: `"subsystem_id:port_id"`.
+- `DiagramSystem.connection_verbose` defaults to `False`; set `True` to print one line per connection.
+- Shortcuts flatten diagram operands instead of nesting them; `+` does not infer cross-wiring.
+- `compute_*` returns `Trajectory`; `plot_*` returns `PlotResult`; `show=False` skips display.
+
+## Examples
+
+| Interest | Start here |
+| --- | --- |
+| Feature tour | [examples/notebooks/demo_showcase.ipynb](examples/notebooks/demo_showcase.ipynb) |
+| Extended tour | [examples/notebooks/demo_overview.ipynb](examples/notebooks/demo_overview.ipynb) |
+| Diagrams | `examples/scripts/diagrams/` |
+| Blocks (routing, filters, nonlinear) | `examples/scripts/blocks/` |
+| Control | `examples/scripts/control/` |
+| Analysis (linearize, trim, ctrb/obsv, modal) | `examples/scripts/analysis/` |
+| State-space / LQR | `examples/scripts/statespace/` |
+| Identification (param gradients) | `examples/scripts/identification/` |
+| Plotting | `examples/scripts/plots/` |
+| Animation | `examples/scripts/animation/` |
+| Optimization | `examples/scripts/optimization/` |
+| Trajectory optimization | `examples/scripts/trajectory_optimization/` |
+| Symbolic mechanics | `examples/scripts/symbolic/` |
+| Physics engine | `examples/scripts/engine/` |
+| Solver benchmarks | [examples/notebooks/simulation_benchmark.ipynb](examples/notebooks/simulation_benchmark.ipynb) (uses repo-root `benchmarks/`) |
+
+Catalog plants live under `minilink.dynamics.catalog.*`.
+
+## Docs
+
+- [DESIGN.md](DESIGN.md) — principles and contracts
+- [ROADMAP.md](ROADMAP.md) — maturity and priorities
+- [agent.md](agent.md) — maintainer / agent rules
+
+Design rules: NumPy baseline, explicit JAX; native-array equation paths;
+`params is None` means object defaults, never `params or self.params`.

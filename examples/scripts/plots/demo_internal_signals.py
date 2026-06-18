@@ -1,12 +1,12 @@
 import numpy as np
 
-from minilink.control.pendulum_pd import PendulumPDController
-from minilink.core.blocks.sources import Step, WhiteNoise
+from minilink.blocks.sources import Step, WhiteNoise
+from minilink.control.linear import PDController
 from minilink.core.diagram import DiagramSystem
-from minilink.dynamics.catalog.pendulum.pendulum import Pendulum
+from minilink.dynamics.catalog.pendulum.pendulum import PendulumWithNoisePort
 
 # Plant system
-sys = Pendulum()
+sys = PendulumWithNoisePort()
 
 sys.params["m"] = 1.0
 sys.params["l"] = 5.0
@@ -32,7 +32,7 @@ noise2.params["mean"] = 0.0
 noise2.params["seed"] = 2
 
 # Closed loop system
-ctl = PendulumPDController()
+ctl = PDController()
 ctl.params["Kp"] = 1000.0
 ctl.params["Kd"] = 100.0
 
@@ -50,6 +50,7 @@ diagram.connect("controller", "u", "plant", "u")
 diagram.connect("plant", "y", "controller", "y")
 diagram.connect("noise", "y", "plant", "w")
 diagram.connect("noise2", "y", "plant", "v")
+
 diagram.plot_diagram()
 
 
@@ -62,3 +63,6 @@ diagram.plot_trajectory(
     signals=("step:y", "x", "plant:y", "controller:u", "noise:y", "noise2:y"),
     backend="matplotlib",
 )
+
+# automatic
+diagram.plot_trajectory()

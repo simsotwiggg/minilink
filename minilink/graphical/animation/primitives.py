@@ -1,4 +1,29 @@
+"""
+Graphical primitives and 4x4 transform helpers for system animation.
+
+A system's visualization is a list of **primitives** (shapes defined in their
+own local frame) plus, at every instant, one 4x4 homogeneous **transform** per
+primitive placing it in the world (see
+:meth:`minilink.core.system.System.get_kinematic_geometry` and
+:meth:`~minilink.core.system.System.get_kinematic_transforms`). Renderers draw
+the primitives; they never know about states or inputs.
+
+Two conventions extend the plain rigid transform:
+
+- **Scale columns**: multiplying the rotation columns by a factor stretches
+  unit-sized primitives (:class:`Arrow`, :class:`CustomLine`) to a world size
+  (:func:`scale_pose2d_matrix`, :func:`arrow_transform`).
+- **Amplitude channel**: the normally-unused ``T[3, 3]`` slot carries a scalar
+  side-channel (torque sweep angle, playback time, camera view scale); renderers
+  read and reset it with :func:`extract_amplitude`.
+
+This module is NumPy-only and safe to import from core kinematic hooks: it
+never pulls in matplotlib or other rendering libraries.
+"""
+
 import numpy as np
+
+# Primitive shapes (local-frame geometry)
 
 
 class GraphicPrimitive:
@@ -27,7 +52,7 @@ class CustomLine(GraphicPrimitive):
 class Point(GraphicPrimitive):
     """An individual point marker."""
 
-    def __init__(self, pt=[0, 0, 0], color="red", marker="o", size=5):
+    def __init__(self, pt=(0, 0, 0), color="red", marker="o", size=5):
         super().__init__(color)
         self.pt = np.array(pt)
         self.marker = marker
@@ -37,7 +62,7 @@ class Point(GraphicPrimitive):
 class Circle(GraphicPrimitive):
     """A basic circle primitive. Lives in the XY plane by default."""
 
-    def __init__(self, radius=1.0, center=[0, 0, 0], color="blue", fill=False):
+    def __init__(self, radius=1.0, center=(0, 0, 0), color="blue", fill=False):
         super().__init__(color)
         self.radius = radius
         self.center = np.array(center)
@@ -47,7 +72,7 @@ class Circle(GraphicPrimitive):
 class Sphere(GraphicPrimitive):
     """A 3D sphere primitive centered at ``center`` in local frame."""
 
-    def __init__(self, radius=1.0, center=[0, 0, 0], color="blue", opacity=1.0):
+    def __init__(self, radius=1.0, center=(0, 0, 0), color="blue", opacity=1.0):
         super().__init__(color)
         self.radius = radius
         self.center = np.array(center)
@@ -81,7 +106,7 @@ class Plane(GraphicPrimitive):
 
     def __init__(
         self,
-        normal=[0, 1, 0],
+        normal=(0, 1, 0),
         offset=0.0,
         size=10.0,
         thickness=0.02,
@@ -94,19 +119,6 @@ class Plane(GraphicPrimitive):
         self.size = float(size)
         self.thickness = float(thickness)
         self.opacity = float(opacity)
-
-
-class Rectangle(GraphicPrimitive):
-    """A standard axis-aligned rectangle in local frame (XY plane by default)."""
-
-    def __init__(
-        self, width=1.0, height=1.0, center=[0, 0, 0], color="blue", fill=False
-    ):
-        super().__init__(color)
-        self.width = width
-        self.height = height
-        self.center = np.array(center)
-        self.fill = fill
 
 
 class Box(GraphicPrimitive):
@@ -264,7 +276,7 @@ class TorqueArrow(GraphicPrimitive):
     carries the **amplitude** (here, the sweep angle in radians).  In a
     standard homogeneous matrix ``T[3, 3]`` is always 1; a non-unit value
     is therefore an unambiguous side-channel that renderers extract before
-    applying the rigid part.  See :ref:`amplitude-channel` and
+    applying the rigid part.  See :func:`extract_amplitude` and
     :func:`torque_pose2d_matrix`.
 
     * Translation ``T[0:2, 3]`` — centre of the arc (joint world position).
@@ -342,6 +354,94 @@ class TorqueArrow(GraphicPrimitive):
             )
 
         return np.vstack([arc, np.array([barb1, tip, barb2])])
+
+
+class HorizonPolyline(GraphicPrimitive):
+    """World-frame polyline of the active receding-horizon plan at time *t*.
+
+    ``plans`` is a sequence of ``(t_solve, trajectory)`` pairs with world-frame
+    ``trajectory.x`` and ``trajectory.t``. At playback time *t* (carried in
+    ``T[3, 3]`` via :func:`time_channel_matrix`), the primitive draws the latest
+    plan with ``t_solve <= t`` over samples with ``trajectory.t >= t``.
+
+    Geometry is rebuilt each frame through :meth:`compute_pts`, like
+    :class:`TorqueArrow`.
+    """
+
+    def __init__(
+        self,
+        plans,
+        *,
+        color="tab:orange",
+        linewidth=2,
+        style="--",
+    ):
+        super().__init__(color, linewidth, style)
+        self.plans = list(plans)
+
+    def compute_pts(self, t_now):
+        """Return Nx3 world-frame polyline points for the active plan tail."""
+        t_now = float(t_now)
+        active = None
+        for t_solve, plan in self.plans:
+            if t_solve <= t_now + 1e-9:
+                active = plan
+        if active is None:
+            return np.zeros((1, 3))
+        mask = active.t >= t_now - 1e-9
+        if np.count_nonzero(mask) < 2:
+            return np.zeros((1, 3))
+        xy = active.x[:2, mask]
+        return np.column_stack([xy[0], xy[1], np.zeros(xy.shape[1])])
+
+
+class TrajectoryPolyline(GraphicPrimitive):
+    """World-frame XY polyline sampled from a :class:`~minilink.core.trajectory.Trajectory`.
+
+    At playback time *t* (carried in ``T[3, 3]`` via :func:`time_channel_matrix`):
+
+    ``window="prefix"``
+        Samples with ``trajectory.t <= t`` — a growing executed trail.
+    ``window="suffix"``
+        Samples with ``trajectory.t >= t``.
+    ``window="all"``
+        Full trajectory polyline (time-independent geometry).
+
+    Geometry is rebuilt each frame through :meth:`compute_pts`, like
+    :class:`HorizonPolyline`.
+    """
+
+    _WINDOWS = ("prefix", "suffix", "all")
+
+    def __init__(
+        self,
+        trajectory,
+        *,
+        window="prefix",
+        color="tab:blue",
+        linewidth=2,
+        style="-",
+    ):
+        super().__init__(color, linewidth, style)
+        self.trajectory = trajectory
+        if window not in self._WINDOWS:
+            raise ValueError(f"window must be one of {self._WINDOWS}, got {window!r}")
+        self.window = window
+
+    def compute_pts(self, t_now):
+        """Return Nx3 world-frame polyline points for the selected time window."""
+        t_now = float(t_now)
+        traj = self.trajectory
+        if self.window == "all":
+            mask = np.ones(traj.n_samples, dtype=bool)
+        elif self.window == "prefix":
+            mask = traj.t <= t_now + 1e-9
+        else:
+            mask = traj.t >= t_now - 1e-9
+        if np.count_nonzero(mask) < 2:
+            return np.zeros((1, 3))
+        xy = traj.x[:2, mask]
+        return np.column_stack([xy[0], xy[1], np.zeros(xy.shape[1])])
 
 
 # Transformation Matrix Helpers
@@ -511,6 +611,13 @@ def world_to_camera(camera):
     return W
 
 
+def time_channel_matrix(t=0.0):
+    """Pass scalar playback time *t* through the ``T[3, 3]`` amplitude channel."""
+    T = np.eye(4)
+    T[3, 3] = float(t)
+    return T
+
+
 def torque_pose2d_matrix(x=0.0, y=0.0, start_angle=0.0, sweep=0.0):
     """4x4 matrix for :class:`TorqueArrow`.
 
@@ -541,3 +648,134 @@ def extract_amplitude(T):
     T_clean = T.copy()
     T_clean[3, 3] = 1.0
     return amplitude, T_clean
+
+
+def identity_matrix():
+    """4x4 identity transform (primitive drawn at the world origin)."""
+    return np.eye(4)
+
+
+def empty_transform():
+    """Transform that parks a primitive far off-screen (used to hide it)."""
+    return translation_matrix(0.0, 0.0, -1000.0)
+
+
+def follow_xy_camera(x, y, scale):
+    """Top-down camera centered on world point *(x, y)* with view half-extent *scale*."""
+    return camera_matrix(target=(x, y, 0.0), plot_axes=(0, 1), scale=scale)
+
+
+def heading_from_vector(vx, vy):
+    """Planar heading angle of the vector *(vx, vy)*."""
+    return np.arctan2(vy, vx)
+
+
+def arrow_transform(x, y, vx, vy, scale=1.0):
+    """Place a unit :class:`Arrow` at *(x, y)*, aligned with *(vx, vy)*.
+
+    The arrow is rotated to the vector heading and stretched to
+    ``scale * |(vx, vy)|`` so its drawn length encodes the magnitude.
+    A near-zero vector collapses to zero length (nothing visible).
+    """
+    length = scale * np.hypot(vx, vy)
+    if length < 1e-12:
+        return scale_pose2d_matrix(x, y, 0.0, 0.0)
+    return scale_pose2d_matrix(x, y, heading_from_vector(vx, vy), length)
+
+
+def line_between_transform(p0, p1):
+    """Place a unit :class:`CustomLine` so it spans from *p0* to *p1* in the plane."""
+    p0 = np.asarray(p0, dtype=float)
+    p1 = np.asarray(p1, dtype=float)
+    delta = p1 - p0
+    return scale_pose2d_matrix(
+        p0[0],
+        p0[1],
+        heading_from_vector(delta[0], delta[1]),
+        np.hypot(delta[0], delta[1]),
+    )
+
+
+def rod_between_transform(p0, p1):
+    """Pose a unit :class:`Rod` (length along local -y) from *p0* to *p1* in 3-D.
+
+    Builds an orthonormal frame whose y-axis points from *p0* toward *p1*;
+    a reference axis is swapped when nearly parallel to keep the cross
+    products well conditioned.
+    """
+    p0 = np.asarray(p0, dtype=float)
+    p1 = np.asarray(p1, dtype=float)
+    delta = p1 - p0
+    length = np.linalg.norm(delta)
+    T = np.eye(4)
+    T[:3, 3] = p0
+    if length < 1e-12:
+        return T
+
+    y_axis = -delta / length
+    reference = np.array([0.0, 0.0, 1.0])
+    if abs(np.dot(y_axis, reference)) > 0.95:
+        reference = np.array([1.0, 0.0, 0.0])
+    x_axis = np.cross(reference, y_axis)
+    x_axis = x_axis / np.linalg.norm(x_axis)
+    z_axis = np.cross(x_axis, y_axis)
+    T[:3, 0] = x_axis
+    T[:3, 1] = y_axis
+    T[:3, 2] = z_axis
+    return T
+
+
+def point_transform(point):
+    """Translation transform placing a primitive at *point* (z defaults to 0)."""
+    point = np.asarray(point, dtype=float)
+    return translation_matrix(point[0], point[1], point[2] if point.size > 2 else 0.0)
+
+
+# Ready-Made Shapes And Poses
+
+
+def ground_line(length=20.0, y=0.0, color="black", style="--"):
+    """Horizontal reference line of span *length* at height *y* (e.g. ground)."""
+    return CustomLine(
+        [[-0.5 * length, y, 0.0], [0.5 * length, y, 0.0]],
+        color=color,
+        linewidth=1,
+        style=style,
+    )
+
+
+def spring_line(coils=6, amplitude=0.12, color="black", linewidth=1):
+    """Unit-length zig-zag spring along local +X (lead-in, *coils* coils, lead-out).
+
+    Drawn from x=0 to x=1; pair with a transform that spans the two endpoints.
+    """
+    pts = [[0.0, 0.0, 0.0], [0.15, 0.0, 0.0]]
+    xs = np.linspace(0.2, 0.8, 2 * coils + 1)
+    for i, x in enumerate(xs):
+        y = amplitude if i % 2 else -amplitude
+        pts.append([x, y, 0.0])
+    pts.append([0.85, 0.0, 0.0])
+    pts.append([1.0, 0.0, 0.0])
+    return CustomLine(pts, color=color, linewidth=linewidth)
+
+
+def wheel_box(length=0.45, width=0.16):
+    """Small flat box used as a wheel/contact patch in vehicle diagrams."""
+    return Box(
+        length_x=length, length_y=width, length_z=0.08, color="black", opacity=0.9
+    )
+
+
+def vehicle_body(length=1.0, width=0.5, color="blue", opacity=0.85):
+    """Planar car/robot shell (arrow-shaped outline pointing along +X)."""
+    pts = np.array(
+        [
+            [-0.5 * length, -0.5 * width, 0.0],
+            [0.3 * length, -0.5 * width, 0.0],
+            [0.5 * length, 0.0, 0.0],
+            [0.3 * length, 0.5 * width, 0.0],
+            [-0.5 * length, 0.5 * width, 0.0],
+            [-0.5 * length, -0.5 * width, 0.0],
+        ]
+    )
+    return CustomLine(pts, color=color, linewidth=2)

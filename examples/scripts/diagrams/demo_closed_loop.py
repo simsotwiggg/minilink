@@ -1,7 +1,7 @@
 import numpy as np
 
-from minilink.control.pendulum_pd import PendulumPDController
-from minilink.core.blocks.sources import Step
+from minilink.blocks.sources import Step
+from minilink.control.linear import PDController
 from minilink.core.diagram import DiagramSystem
 from minilink.dynamics.catalog.pendulum.pendulum import Pendulum
 
@@ -18,7 +18,7 @@ step.params["final_value"] = np.array([1.0])
 step.params["step_time"] = 10.0
 
 # Closed loop system
-ctl = PendulumPDController()
+ctl = PDController()
 ctl.params["Kp"] = 1000.0
 ctl.params["Kd"] = 100.0
 
@@ -35,18 +35,18 @@ diagram.connect("step", "y", "controller", "r")
 diagram.name = "Pendulum alone"
 diagram.plot_diagram()
 diagram.compute_trajectory(tf=20)
-diagram.animate()
+diagram.plot_trajectory()
 
 # Open loop controller -> plant
 diagram.connect("controller", "u", "plant", "u")
 diagram.name = "Pendulum with Open Loop Controller"
 diagram.plot_diagram()
 diagram.compute_trajectory(tf=20)
-diagram.animate()
+diagram.plot_trajectory()
 
 # Closed loop controller -> plant
 diagram.connect("plant", "y", "controller", "y")
 diagram.name = "Closed Loop Pendulum "
 diagram.plot_diagram()
 diagram.compute_trajectory(tf=20)
-diagram.animate()
+diagram.plot_trajectory()

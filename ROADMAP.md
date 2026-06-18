@@ -1,232 +1,105 @@
 # Minilink Roadmap
 
-This document tracks active priorities and maturity. Design contracts live in
-[DESIGN.md](DESIGN.md); maintainer/agent contribution rules live in
+Maturity and priorities. Contracts: [DESIGN.md](DESIGN.md). Agent rules:
 [agent.md](agent.md).
 
-## 1. Maturity Matrix
+## 1. Maturity
 
-| Area | Status | Next milestone |
-| --- | --- | --- |
-| Core objects | TRL 7 | Lock public exports and finish remaining contract details. |
-| Compile/evaluators | TRL 4 | Add diagram parametric tier and strengthen backend parity. |
-| Simulation | TRL 4 | Clarify solver options and forcing behavior. |
-| Optimization | TRL 1 | Harden generic NLP pipeline with SciPy/Ipopt and NumPy/JAX evaluators. |
-| Planning/trajopt | TRL 1 | Validate deterministic planning API and grow method coverage carefully. |
-| Graphical | TRL 2 | Signal/diagram backend seams added; stabilize render/interactive loops after core contracts settle. |
-| Dynamics catalog | TRL 0-1 | Grow reviewed plants by domain. |
-| Symbolic/physics/control | TRL 0-1 | Keep MVP examples working; expand only behind clear use cases. |
+| Area | TRL | Rationale | Next |
+| --- | --- | --- | --- |
+| Core + diagrams | 7 | Public API and diagram API are probably stable after the final port-declaration update. | Keep stable; finish export policy and remaining edge cases. |
+| Compile (`core/compile/`) | 4 | Integrated, but dynamic evaluator methods and exposed surface still need user review. | Review evaluator API, diagram parametric tier, and backend parity. |
+| Simulation | 7 | Mature workflow with stable API and solver/forcing coverage. | Keep behavior stable; treat `SimulationOptions` as ergonomic cleanup, not a redesign. |
+| Optimization | 5 | `MathematicalProgram` and `Optimizer` are integrated and useful, but backend details still need hardening. | Harden SciPy/Ipopt behavior and evaluator details before test-gated promotion. |
+| Planning/trajopt | 2 | Some user review happened, but much of the module remains AI one-shot prototype work. | Re-evaluate architecture/API before deeper integration. |
+| Graphical | 3 | Useful, but plotting/diagram APIs are still evolving. | Do not freeze public APIs until kinematic/visual hooks use composition (dynamics vs skin separation); re-evaluate after that review. |
+| Animation | 3 | Substantial work exists, but renderer, camera, and live-loop contracts may still change. | Same gate as Graphical: composition-based kinematic contract before TRL promotion or API freeze. |
+| Dynamics catalog | 6 | Pyro models ported, QA'd term-by-term against pyro, and covered by tests (see `docs/plans/catalog-migration-notes.md`); `DynamicBicycle` params now thread fully. | Review naming/details per module toward TRL 7. |
+| Symbolic mechanics | 1 | One-shot AI-generated demos, not a validated subsystem. | Keep isolated until clear use cases justify review. |
+| Contact engine (`dynamics/engines/`) | 1 | Moved out of quarantine by maintainer decision (June 2026); math not yet QA-validated. | Add validation tests (energy, analytic contact cases) toward TRL 2. |
+| Analysis | 5 | `linearize` (→ `LTISystem`, FD + JAX), `structural`, `equilibria`, `modal` (eigenmodes + animation), selected-channel Bode; demos in `examples/scripts/analysis/`. | Extend `frequency.py` with pole-zero, Nyquist, and margins. |
+| Control | 5 | `control/linear.py` (`ProportionalController` (SISO+MIMO)/`PDController`/`PIDController`/`LinearStateFeedbackController`), `control/lqr.py` (`lqr_gain`/`lqr`/`lqr_at_operating_point`), and `control/pid.py` (`FilteredPIDController` with anti-windup) integrated and tested. | Port computed-torque, sliding-mode, robotic controllers. |
 
-TRL definitions are in [agent.md (section 8)](agent.md#8-trl-lifecycle).
+TRL definitions: [agent.md §8](agent.md#8-trl-lifecycle).
 
-## 2. Completed Architecture Work
+## 2. Done (architecture)
 
-Modeling is separated from compile, simulation, optimization, planning, and
-graphics. Diagrams compile through a shared `ExecutionPlan`; NumPy and JAX
-dynamics evaluators exist for leaves and diagrams. `Trajectory` is the shared
-sampled state-input object; `core.blocks` holds lightweight diagram blocks.
-Optional diagram composition shortcuts (`+`, `>>`, `@`, and conservative
-`autowire`) now build ordinary `DiagramSystem` objects while the explicit
-named-port API remains the canonical general interface.
-Custom block ports are explicit, ID-first, and metadata-aware; base systems no
-longer create hidden default ports, while `DynamicSystem` exposes standard
-`u`/`y`/`x` ports only through explicit constructor options.
+- Separated model / compile / simulate / optimize / plan / graphics.
+- `ExecutionPlan` + NumPy/JAX evaluators; shared `Trajectory`.
+- Composition shortcuts (`+`, `>>`, `@`, `autowire`) → ordinary `DiagramSystem`.
+- Explicit ports; `DynamicSystem` textbook ports via constructor options.
+- Pure `MathematicalProgram` + `Optimizer`; backend-native trajopt transcriptions.
+- Phase-plane plotting (`plot_phase_plane`, matplotlib).
+- User docs: [README.md](README.md) (workflows and minimal call chains).
+- Package taxonomy: four bands (framework / system libraries / tools /
+  quarantine) with a dependency law and placement algorithm
+  ([DESIGN.md §3](DESIGN.md)); `compile/` folded into `core/compile/`;
+  generic blocks in top-level `blocks/`; generic control laws in
+  `control/linear.py` and `control/pid.py`; `System` facades split into `core/facades.py`
+  (API unchanged).
 
-Optimization uses pure `MathematicalProgram` plus external evaluators and
-`Optimizer` method presets (`scipy_slsqp`, `scipy_trust_constr`, `ipopt`).
-Trajectory-optimization transcriptions emit `MathematicalProgram`; JAX comes from
-traceable equations and program evaluators, not parallel JAX transcription types.
-The native-array equation rule applies across those paths (see DESIGN §3).
+## 3. Priorities
 
-## 3. Active Priorities
+**P0** — Docs/contracts aligned with code; compiled vs reference path parity.
 
-### P0
+**P1** — Dynamic evaluator API review; ~~diagram parametric evaluators (`f_p`,
+`h_p`)~~ done (nested `{sys_id: {…}}` params, `jacobian_f_params`; see
+DESIGN.md §4 Parameters and `examples/scripts/identification/demo_params_gradient.py`); diagram validation;
+top-level `minilink` exports; NLP hardening.
 
-- Keep docs and public contracts aligned with code.
-- Fix correctness issues that make reference paths disagree with compiled paths.
+**P2** — ~~`analysis/` seed (linearization → matrices/`LTISystem`)~~ done (also ctrb/obsv,
+equilibria, modal, selected-channel Bode); remaining frequency tools pending. ~~`control/lqr.py` (design fn +
+state-feedback block)~~ done. ~~blocks round-out (Sum, Gain, Saturation; PID in
+`control/linear.py`)~~ done (routing, nonlinear, filters, `TrajectorySource`,
+PID, MIMO proportional). Remaining: nested-diagram ergonomics; forced-input
+helpers; swappable live graphics backends; refactor `System` visualization hooks
+(`get_kinematic_*`, camera) to delegate to composable kinematic models (pilot
+one catalog plant, e.g. pendulum) before calling `graphical/` TRL ≥ 4.
 
-### P1
+## 4. Review queue (needs maintainer sign-off)
 
-- Add diagram parametric evaluator tier for `f_p`, `h_p`, and `outputs_p`.
-- Make diagram params semantics explicit and tested across NumPy and JAX.
-- Add diagram validation for subsystem ids, port ids, wiring shape, and common
-  connection mistakes.
-- Clarify top-level public exports in `minilink/__init__.py`.
-- Introduce a small `SimulationOptions`-style solver configuration surface.
-- Continue hardening the generic NLP pipeline with SciPy and Ipopt backends.
+- Public export policy for `minilink/__init__.py`.
+- Diagram validation as separate `validate()` vs inline wiring.
+- Trajopt transcription internal consolidation.
+- Dynamic bicycle module split.
+- Graphics/camera contract consolidation, including kinematic composition
+  (optional `KinematicModel` delegate on `System`, fate of `get_dynamic_geometry`,
+  diagram aggregation unchanged) as a prerequisite for finalizing `graphical/`.
 
-### P2
+## 5. Future
 
-- Add phase-plane vector-field plotting with trajectory overlays as a small
-  Pyro-parity graphics feature.
-- Add remaining reusable control/core blocks such as transfer-function and PID
-  once the API shape is stable; exact state-space lives under dynamics
-  abstractions.
-- Add linearization and differentiation helpers after the first-pass dynamics
-  abstraction tree is stable.
-- Improve diagram port exporting and nested-diagram ergonomics on top of the
-  explicit port API. The custom-system port cleanup is recorded in
-  [docs/plans/custom-system-ports-implementation-plan.md](docs/plans/custom-system-ports-implementation-plan.md).
-- Extend simulator-level forced-input helpers only after current workflows are
-  stable.
-- Factor interactive graphics into swappable real-time integrator and live-input
-  backends.
+Pre-decided homes (bands and placement rules in [DESIGN.md §3](DESIGN.md)),
+in rough build order:
 
-## 4. Technical Direction
+1. **`analysis/`** — linearization (→ matrices/`LTISystem`), ctrb/obsv, equilibria,
+   modal (eigenmodes + animation), and selected-channel Bode done; still pending:
+   pole-zero, Nyquist, and margins.
+   Phase-plane math migrates here from `graphical/` when touched.
+2. **`control/`** — `lqr.py`, `linear.py`, and `control/pid.py`
+   (`FilteredPIDController`) done; still pending: `computed_torque.py`,
+   `sliding_mode.py`, `robotic.py` (impedance), `mpc.py` (uses `optimization/`),
+   `neural.py` (NN policies).
+3. **`blocks/`** — routing, nonlinear, filters, and `TrajectorySource` done;
+   still pending: `neural.py` (MLP block, pure `jnp`, `params` = weights).
+4. **`estimation/`** — `luenberger.py`, `kalman.py`, later `ekf.py` (uses
+   `analysis/` linearization) and `recursive.py` (online parameter
+   estimators: RLS, adaptive laws). Offline fitting stays in
+   `identification/`.
+5. **`identification/`** — fit parametric systems to data; one verb for
+   physical params and network weights (`fitting.py`, first-order optimizers,
+   datasets). Depends on the parametric evaluator tier (P1).
+6. **`interfaces/`** — `gymnasium.py` (RL trains outside; policies return as
+   `control/` blocks), `torch.py`/`flax.py` model wrappers, cosimulation/FMI,
+   multibody import.
+7. **Quarantine graduation** — `symbolic/` as a dynamics-authoring tool.
+   (The JAX contact engine moved to `dynamics/engines/` in June 2026 —
+   still experimental; validation tests pending.)
 
-**Optimization stack** — Keep `MathematicalProgram` minimal (`J`, aggregate `h`
-and `g`, bounds, optional derivatives, metadata). Keep `Optimizer` as the
-method-preset surface; trajectory optimization stays as single transcription
-classes per method where equations remain backend-native. Use JAX program
-evaluators for `jit`, gradients, and Jacobians when traceable. Long term: richer
-program classes (QP/LP) when justified; optimizers may inspect structure for solver
-choice; generic NLP remains the fallback.
+Out of scope by decision: discrete time (digital control, ZOH/delay blocks,
+RNNs, mixed-rate simulation) — minilink stays continuous-time only; see
+[DESIGN.md §3](DESIGN.md).
 
-**JAX** — Prefer explicit `compile_backend` / evaluator choices; backend-native
-algebra for simple sets and costs; `Jax<Plant>` twins only when one readable
-implementation cannot serve both NumPy and JAX. Frame limits around traceability
-and diagram params, not legacy parallel JAX layers.
-
-**Dynamics abstraction tree** — Keep the executable root at `DynamicSystem`.
-Reusable dynamics bases live in `dynamics/abstraction`; catalog plants keep short
-domain names such as `Pendulum`, `CartPole`, and `DynamicBicycle`.
-
-First-pass bases:
-
-- `StateSpaceSystem`: exact LTI `dx = A @ x + B @ u`, `y = C @ x + D @ u`.
-- `MechanicalSystem`: generalized-coordinate mechanics with `x = [q, dq]`;
-  default hooks are native-array, but concrete subclass traceability depends on
-  the overridden equations.
-- `GeneralizedMechanicalSystem`: generalized/body-velocity mechanics with
-  `x = [q, v]`, `qdot = N(q) @ v`, and native-array default hooks.
-
-Use named input ports plus explicit force/allocation hooks for mixed input
-semantics such as steering, elevator angles, tire forces, aerodynamic surfaces,
-and propulsors. Do not add `WithPositionInputs` inheritance branches.
-
-Backburner items: `KinematicSystem`, `ManipulatorSystem`, linearization, and
-analysis helpers such as task-space dynamics and manipulability tools.
-
-## 5. Phase B Review Queue
-
-These are larger simplification or contract moves identified during the Phase A
-cleanup pass. They need maintainer review before implementation.
-
-- Split the `System` facade from the math contract: keep `f`, `h`, ports,
-  params, and state metadata central; move plotting, diagrams, animation, and
-  game shortcuts behind a small facade/mixin layer only if the public API stays
-  equally readable.
-- Freeze top-level public exports in `minilink/__init__.py`; decide whether the
-  package should stay namespace-only or expose a tiny textbook API such as
-  `System`, `DiagramSystem`, `Simulator`, `Trajectory`, and common blocks.
-- Decide whether diagram validation belongs in a separate debug/check function
-  rather than in the plain wiring methods. The default source path should stay
-  readable and direct.
-- Design the diagram parametric evaluator tier (`f_p`, `h_p`, `outputs_p`) so
-  NumPy and JAX diagram params have one explicit contract instead of today’s
-  bind-or-recompile limitation.
-- Consolidate trajectory-optimization transcription internals: direct
-  collocation, shooting, and multiple shooting repeat objective integration,
-  path constraints, boundary constraints, and result reconstruction.
-- Split the large dynamic bicycle module into reviewed math, tire, graphics, and
-  JAX-specific sections or modules without changing the user-facing plant names.
-- Decide what to do with placeholder planning modules (`search/rrt.py` and
-  `policy_synthesis/dynamic_programming.py`): implement behind minimal contracts
-  or mark them clearly as non-public prototypes.
-- Introduce the planned solver-options object for simulation so `Simulator`,
-  `compute_trajectory`, and forced-input paths do not grow more keyword
-  ceremony.
-- Review the graphics contract after core stabilizes: camera/framing is now
-  useful but still provisional, and renderers share enough behavior to justify a
-  focused consolidation pass.
-
-## 6. Future Directions
-
-- differentiable simulation rollouts;
-- hybrid/event systems;
-- LQR and control synthesis helpers;
-- Gymnasium/RL bridges;
-- richer interactive/cosimulation loops;
-- multibody plant workflows and model import.
-
-## 7. Phase-Plane Plot Plan
-
-Phase-plane plotting is the next small Pyro-parity graphics feature. Pyro's
-`PhasePlot` builds a 2D grid over two selected state coordinates, evaluates
-`f(x, u, t)` at each grid point with all other state components held at a
-nominal value, and renders the selected derivative components as a quiver or
-stream plot. Minilink should keep the same user value while fitting the current
-graphics contracts.
-
-### Scope
-
-- Implement 2D phase-plane vector fields for any `System` with at least one
-  state.
-- Support selecting `x_axis` and `y_axis`; allow the same state index on both
-  axes for one-state systems, matching Pyro's simple-integrator demos.
-- Support optional trajectory overlays with start/end markers using Minilink's
-  canonical `Trajectory` shape `(n, N)`.
-- Support `show=False` for tests and headless notebooks.
-- Use matplotlib first. Plotly and 3D phase plots are follow-up features.
-
-### Public API
-
-- Add `minilink.graphical.phase_plane` with:
-  - `PhasePlaneSpec`: backend-neutral grid, vector field, labels, units,
-    bounds, title, and optional trajectory-overlay data.
-  - `build_phase_plane_spec(sys, traj=None, *, x_axis=0, y_axis=None, u=None,
-    x_ref=None, t=0.0, bounds=None, grid_shape=(21, 21), params=None)`.
-  - `plot_phase_plane(sys, traj=None, *, x_axis=0, y_axis=None, u=None,
-    x_ref=None, t=0.0, bounds=None, grid_shape=(21, 21), streamplot=False,
-    show=True, **kwargs)`.
-- Export the new helpers through `minilink.graphical.phase_plane`.
-- Add `System.plot_phase_plane(...)` as the object-level facade. If `traj` is
-  omitted and `self.traj` exists, overlay it; otherwise plot only the vector
-  field.
-- Add `System.plot_phase_plane_trajectory(...)` only as a Pyro-friendly alias if
-  the facade remains simple; internally it should call `plot_phase_plane`.
-
-### Data And Defaults
-
-- Default `x_ref` to `sys.state.nominal_value` when available, otherwise zeros.
-- Default `u` to `sys.get_u_from_input_ports()` so named-port systems respect
-  input-port nominal values.
-- Default `bounds` to finite `sys.state.lower_bound` / `upper_bound` for the two
-  selected axes.
-- If selected bounds are infinite, derive bounds from the overlay trajectory
-  with padding; if no trajectory is available, use a conservative centered
-  fallback such as `[-10, 10]`.
-- Validate axis indices, grid dimensions, vector dimensions, and finite plotting
-  bounds with clear `ValueError` messages.
-
-### Rendering
-
-- Keep vector-field construction NumPy boundary code. It can call `sys.f` in a
-  simple nested loop; no compiled/vectorized path is needed for the first
-  implementation.
-- Render with `Axes.quiver` by default and `Axes.streamplot` when requested.
-- Label axes from `sys.state.labels` and `sys.state.units`.
-- Return the existing `PlotResult` shape (`backend`, `payload`, `figure`,
-  `axes`) for consistency with time-signal plots.
-- Follow existing matplotlib environment behavior: set PDF/PS font embedding,
-  avoid blocking when `show=False`, and rely on style helpers where they fit.
-
-### Tests And Demo
-
-- Add unit tests covering:
-  - vector-field values for a simple two-state test system;
-  - one-state same-axis behavior;
-  - finite state-bound defaults and infinite-bound fallback;
-  - trajectory overlay shape/orientation;
-  - `show=False` matplotlib rendering under Agg.
-- Add `examples/scripts/plots/demo_phase_plane.py` with `Pendulum` and
-  `FloatingMass1D` examples.
-- Update README/DESIGN graphics text after the API lands.
-
-### Follow-Ups
-
-- 3D phase plots.
-- Open-loop versus closed-loop dual vector-field overlays.
-- Plotly rendering.
-- Compiled/vectorized evaluator acceleration for dense grids.
-- Cost-to-go/policy overlays once dynamic programming is implemented.
+Also: differentiable rollouts; hybrid/events; RRT and dynamic programming
+(removed as stubs — re-design before reintroducing, under `planning/search/`
+and `planning/policy_synthesis/`); phase-plane follow-ups (Plotly, 3D,
+compiled grid eval).

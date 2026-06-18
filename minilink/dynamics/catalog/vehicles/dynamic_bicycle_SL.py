@@ -358,8 +358,8 @@ class DynamicBicycleRearWheelDrive(DynamicBicycleMagicForces):
             "X",
             "Y",
             "theta",
-            "u",
-            "v",
+            "vx",
+            "vy",
             "r",
             "w_l",
             "w_r",
@@ -428,7 +428,7 @@ class DynamicBicycleRearWheelDrive(DynamicBicycleMagicForces):
         """
         dq = N(q) @ v
 
-        q = [X, Y, theta, phi_l, phi_r]
+        q = [X, Y, theta]
         v = [vx, vy, r, w_l, w_r]
         """
         theta = q[2]
@@ -633,8 +633,8 @@ class DynamicBicycleRearWheelDriveEngine(DynamicBicycleRearWheelDrive):
             "X",
             "Y",
             "theta",
-            "u",
-            "u",
+            "vx",
+            "vy",
             "r",
             "w_rear",
             "w_front",
@@ -698,9 +698,7 @@ class DynamicBicycleRearWheelDriveEngine(DynamicBicycleRearWheelDrive):
         Fz_r = self.mass * self.gravity * (self.a / self.L)
 
         alpha, kappa = self.tire_model_r.vel2slip(vx_r, vy_r, w_r, self.r_r)
-        Fx, Fy = self.tire_model_r.slip2forces(alpha, kappa, Fz_r)
-        # TODO: Pour slip investigation
-        # Fx, Fy = self.tire_model_r.slip2forces(alpha, kappa, Fz_r, logs=False)
+        Fx, Fy = self.tire_model_r.slip2forces(alpha, kappa, Fz_r, logs=False)
         return np.array([Fx, kappa, Fy, alpha], dtype=float)
 
     def x2q(self, x):

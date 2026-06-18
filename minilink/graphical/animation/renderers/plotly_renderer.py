@@ -7,15 +7,6 @@ import types
 import matplotlib.colors as mcolors
 import numpy as np
 
-from minilink.graphical.common.plotly_style import (
-    PLOTLY_2D_MARGIN,
-    PLOTLY_3D_MARGIN,
-    PLOTLY_ANIMATION_2D_MARGIN,
-    PLOTLY_ANIMATION_3D_MARGIN,
-    PLOTLY_ANIMATION_HEIGHT,
-    PLOTLY_FIG_WIDTH,
-    PLOTLY_TEMPLATE,
-)
 from minilink.graphical.animation.primitives import (
     Arrow,
     Box,
@@ -26,12 +17,22 @@ from minilink.graphical.animation.primitives import (
     Point,
     Rod,
     Sphere,
+    HorizonPolyline,
     TorqueArrow,
+    TrajectoryPolyline,
     extract_amplitude,
     world_to_camera,
 )
 from minilink.graphical.animation.renderers.renderer import AnimationRenderer
-
+from minilink.graphical.common.plotly_style import (
+    PLOTLY_2D_MARGIN,
+    PLOTLY_3D_MARGIN,
+    PLOTLY_ANIMATION_2D_MARGIN,
+    PLOTLY_ANIMATION_3D_MARGIN,
+    PLOTLY_ANIMATION_HEIGHT,
+    PLOTLY_FIG_WIDTH,
+    PLOTLY_TEMPLATE,
+)
 
 _AXIS_LABEL_BY_INDEX = ("X", "Y", "Z")
 _BOX_EDGES = (
@@ -362,7 +363,15 @@ class PlotlyRenderer(AnimationRenderer):
         self.is_3d = is_3d
         return self._build_animation_figure(primitives, frames, schedule)
 
-    def play_native(self, primitives, frames, schedule, *, is_3d: bool):
+    def play_native(
+        self,
+        primitives,
+        frames,
+        schedule,
+        *,
+        is_3d: bool,
+        scene_title: str | None = None,
+    ):
         self.is_3d = is_3d
         fig = self._build_animation_figure(primitives, frames, schedule)
         fig.show(
@@ -628,9 +637,9 @@ class PlotlyRenderer(AnimationRenderer):
                 is_3d=self.is_3d,
             )
 
-        if isinstance(primitive, TorqueArrow):
-            sweep, T_rigid = extract_amplitude(T)
-            pts = _transform_points(primitive.compute_pts(sweep), T_rigid)
+        if isinstance(primitive, (TorqueArrow, HorizonPolyline, TrajectoryPolyline)):
+            channel, T_rigid = extract_amplitude(T)
+            pts = _transform_points(primitive.compute_pts(channel), T_rigid)
             return _line_trace(
                 go,
                 x=pts[:, 0],
@@ -715,7 +724,9 @@ class PlotlyRenderer(AnimationRenderer):
 
         if isinstance(primitive, Plane):
             vertices = _transform_points(_plane_vertices(primitive), T)
-            x, y, z = _line_arrays_from_edges(vertices, ((0, 1), (1, 3), (3, 2), (2, 0)))
+            x, y, z = _line_arrays_from_edges(
+                vertices, ((0, 1), (1, 3), (3, 2), (2, 0))
+            )
             return _line_trace(
                 go,
                 x=x,
