@@ -484,7 +484,7 @@ class Los(System):
             dependencies=["x", "y", "psi"],
         )
 
-    def los(self, x, u, t=0.0, params=None):
+    def los(self, u):
         """
         Fonction appelée par Minilink.
 
