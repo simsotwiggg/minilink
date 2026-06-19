@@ -59,7 +59,7 @@ class AngularSpeedToSteeringMap(System):
             dependencies=["r_targ", "vx_meas"],
         )
 
-    def h_force(self, x, u, t=0.0, params=None):
+    def h_force(self, u):
         r_targ = float(u[0])
         vx_meas = float(u[1])
 

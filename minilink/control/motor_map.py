@@ -43,7 +43,7 @@ class AccToThr(System):
             dependencies=["acc_targ", "w_rear"],
         )
 
-    def h_thr(self, x, u, t=0.0, params=None):
+    def h_thr(self, u):
         acc_targ = float(u[0])
         w_rear = float(u[1])
 

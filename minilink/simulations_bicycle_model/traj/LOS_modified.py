@@ -366,7 +366,7 @@ class LosSL(System):
     # def u_speed(self, x, u, t=0.0, params=None):
     #     print(self.chi_ref)
 
-    def logs(self, x, u, t=0.0, params=None):
+    def logs(self, u):
 
         px = float(u[0])
         py = float(u[1])

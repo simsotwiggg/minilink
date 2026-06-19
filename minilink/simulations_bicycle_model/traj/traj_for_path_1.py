@@ -13,7 +13,7 @@ from minilink.dynamics.catalog.vehicles.dynamic_bicycle_SL import (
     DynamicBicycleRearWheelDriveEngine,
 )
 from minilink.simulations_bicycle_model.path.path_plotter import Lines
-from minilink.simulations_bicycle_model.traj.LOS_modified import Los
+from minilink.simulations_bicycle_model.traj.LOS_modified import Los, wrap_pi
 from minilink.simulations_bicycle_model.traj.path_segments import (
     make_rectangle_path,
     make_rounded_rectangle_from_path,
@@ -23,13 +23,12 @@ from minilink.simulations_bicycle_model.vehicule_helper import (
     create_vehicle,
 )
 
-
-def wrap_pi(angle):
-    """
-    Ramène un angle dans [-pi, pi].
-    Remplace simpleSpeedBoatSim._wrap_pi si non disponible.
-    """
-    return (angle + math.pi) % (2.0 * math.pi) - math.pi
+# def wrap_pi(angle):
+#     """
+#     Ramène un angle dans [-pi, pi].
+#     Remplace simpleSpeedBoatSim._wrap_pi si non disponible.
+#     """
+#     return (angle + math.pi) % (2.0 * math.pi) - math.pi
 
 
 class PIDTheta(PID):
