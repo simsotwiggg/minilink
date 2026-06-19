@@ -698,7 +698,7 @@ class DynamicBicycleRearWheelDriveEngine(DynamicBicycleRearWheelDrive):
         Fz_r = self.mass * self.gravity * (self.a / self.L)
 
         alpha, kappa = self.tire_model_r.vel2slip(vx_r, vy_r, w_r, self.r_r)
-        Fx, Fy = self.tire_model_r.slip2forces(alpha, kappa, Fz_r, logs=False)
+        Fx, Fy = self.tire_model_r.slip2forces(alpha, kappa, Fz_r)
         return np.array([Fx, kappa, Fy, alpha], dtype=float)
 
     def x2q(self, x):

@@ -33,7 +33,7 @@ def wrap_pi(angle):
 
 
 class PIDTheta(PID):
-    def calculate_error(self, ref: float, meas: float) -> float:
+    def calculate_error(self, ref: float, meas: float, u) -> float:
         e = wrap_pi(ref - meas)
         return float(e)
 
@@ -159,7 +159,7 @@ def main():
 
     diagram = create_diagram(vehicle, vx_ref=vx)
 
-    # diagram.plot_diagram()
+    diagram.plot_diagram()
 
     diagram.compute_trajectory(tf=30, dt=0.01)
 
@@ -310,18 +310,18 @@ def main():
     # vehicle.camera_scale = 15.0
     attach_vehicle_centered_diagram_camera(diagram, vehicle)
     # Save animation to MP4 using the Matplotlib renderer (requires ffmpeg)
-    # diagram.animate(renderer="matplotlib")
+    diagram.animate(renderer="matplotlib")
 
-    from minilink.graphical.animation import Animator
+    # from minilink.graphical.animation import Animator
 
-    animator = Animator(diagram)
-    animator.animate_simulation(
-        diagram.traj,
-        renderer="matplotlib",
-        save=True,
-        file_name="traj_for_path_1_combined",
-        show=True,
-    )
+    # animator = Animator(diagram)
+    # animator.animate_simulation(
+    #     diagram.traj,
+    #     renderer="matplotlib",
+    #     save=True,
+    #     file_name="traj_for_path_1_combined",
+    #     show=True,
+    # )
 
 
 if __name__ == "__main__":

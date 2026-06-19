@@ -13,7 +13,7 @@ class ConstantReference(System):
 
         self.inputs = {}
         self.outputs = {}
-        self.recompute_input_properties()
+        # self.recompute_input_properties()
 
         self.ref = float(ref)
 
