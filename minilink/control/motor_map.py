@@ -9,16 +9,19 @@ from minilink.dynamics.catalog.vehicles.dynamic_bicycle_SL import (
 class AccToThr(System):
     def __init__(
         self,
-        vehicle: DynamicBicycleRearWheelDriveEngine,
+        r_r: float,
+        engine_power_peak: float,
+        mass: float,
+        transmission_ratio: float = 1.0,
     ):
         super().__init__()
         self.name = "Acceleration to throttle map"
 
-        self.r_r = float(vehicle.r_r)
-        self.engine_power_peak = vehicle.engine_power_peak
-        self.transmission_ratio = vehicle.transmission_ratio
+        self.r_r = r_r
+        self.engine_power_peak = engine_power_peak
+        self.transmission_ratio = transmission_ratio
 
-        self.mass = float(vehicle.mass)
+        self.mass = mass
 
         self.inputs = {}
         self.add_input_port(

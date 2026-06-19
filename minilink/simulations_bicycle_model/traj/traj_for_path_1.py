@@ -67,7 +67,11 @@ def create_diagram(vehicle: DynamicBicycleRearWheelDriveEngine, vx_ref=1.0):
 
     v_bicycle = ConstantReference(ref=vx_ref, name="Constant speed")
 
-    r_to_steering = AngularSpeedToSteeringMap(vehicle)
+    r_to_steering = AngularSpeedToSteeringMap(
+        max_steer=vehicle.max_steer,
+        min_steer=vehicle.min_steer,
+        lenght_vehicule=vehicle.L,
+    )
 
     full_state_meas = BicycleMeasurement(name="Meas states", y_size=10)
 
@@ -93,7 +97,9 @@ def create_diagram(vehicle: DynamicBicycleRearWheelDriveEngine, vx_ref=1.0):
         name="Yaw rate PID",
     )
 
-    acc_to_thr = AccToThr(vehicle)
+    acc_to_thr = AccToThr(
+        r_r=vehicle.r_r, engine_power_peak=vehicle.engine_power_peak, mass=vehicle.mass
+    )
 
     v_pid = PID(
         Kp=0.8,

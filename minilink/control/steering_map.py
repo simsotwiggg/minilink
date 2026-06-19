@@ -1,9 +1,6 @@
 import numpy as np
 
 from minilink.core.system import System
-from minilink.dynamics.catalog.vehicles.dynamic_bicycle_SL import (
-    DynamicBicycleRearWheelDriveEngine,
-)
 
 
 class AngularSpeedToSteeringMap(System):
@@ -26,7 +23,9 @@ class AngularSpeedToSteeringMap(System):
 
     def __init__(
         self,
-        vehicle: DynamicBicycleRearWheelDriveEngine,
+        max_steer: float,
+        min_steer: float,
+        lenght_vehicule: float,
         name: str = "Angular speed to steering",
     ):
         # 0 states
@@ -35,9 +34,9 @@ class AngularSpeedToSteeringMap(System):
         super().__init__(0)
 
         self.name = name
-        self.L = vehicle.L
-        self.max_steer = vehicle.max_steer
-        self.min_steer = vehicle.min_steer
+        self.L = lenght_vehicule
+        self.max_steer = max_steer
+        self.min_steer = min_steer
 
         self.inputs = {}
 
@@ -75,5 +74,5 @@ class AngularSpeedToSteeringMap(System):
     def get_kinematic_geometry(self):
         return []
 
-    def get_kinematic_transforms(self, _x, _u, _t):
+    def get_kinematic_transforms(self, x, u, t):
         return []
