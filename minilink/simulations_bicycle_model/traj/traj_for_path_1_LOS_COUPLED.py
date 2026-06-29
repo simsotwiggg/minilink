@@ -106,8 +106,11 @@ def create_diagram(vehicle: DynamicBicycleRearWheelDriveEngine, vx_ref=1.0):
 
     los_demux = Demux(name="los_demux", y_size=2)
 
-    r_to_steering = AngularSpeedToSteeringMap(vehicle)
-
+    r_to_steering = AngularSpeedToSteeringMap(
+        max_steer=vehicle.max_steer,
+        min_steer=vehicle.min_steer,
+        lenght_vehicule=vehicle.L,
+    )
     full_state_meas = BicycleMeasurement(name="Meas states", y_size=10)
 
     theta_pid = PIDTheta(
@@ -132,8 +135,9 @@ def create_diagram(vehicle: DynamicBicycleRearWheelDriveEngine, vx_ref=1.0):
         name="Yaw rate PID",
     )
 
-    acc_to_thr = AccToThr(vehicle)
-
+    acc_to_thr = AccToThr(
+        r_r=vehicle.r_r, engine_power_peak=vehicle.engine_power_peak, mass=vehicle.mass
+    )
     v_pid = PID(
         Kp=0.8,
         Ki=0.01,
@@ -192,7 +196,7 @@ def create_diagram(vehicle: DynamicBicycleRearWheelDriveEngine, vx_ref=1.0):
     diagram.connect("v_pid", "cmd", "acc_to_thr", "acc_targ")
 
     diagram.connect("acc_to_thr", "thr", "vehicle", "thr")
-    diagram.connect("full_state_meas", "w_r_meas", "acc_to_thr", "w_rear")
+    diagram.connect("full_state_meas", "w_r_meas", "acc_to_thr", "w_motor")
 
     return diagram
 
@@ -204,7 +208,7 @@ def main():
 
     diagram = create_diagram(vehicle, vx_ref=vx)
 
-    # diagram.plot_diagram()
+    diagram.plot_diagram()
 
     diagram.compute_trajectory(tf=30, dt=0.01)
 

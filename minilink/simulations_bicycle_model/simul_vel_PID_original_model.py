@@ -1,6 +1,6 @@
 """Velocity PID demo for DynamicBicycle.
 
-Controls rear wheel speed ``w_rear`` to track a constant longitudinal speed
+Controls rear wheel speed ``w_motor`` to track a constant longitudinal speed
 reference ``u_ref``. No path tracking, no heading loop, no yaw-rate loop.
 
 Run from repo root::
@@ -11,12 +11,12 @@ Run from repo root::
 import types
 
 import numpy as np
-
-from minilink.core.diagram import DiagramSystem
-from minilink.core.system import DynamicSystem, System
 from minilink.dynamics.catalog.vehicles.dynamic_bicycle_ALEXS_THINGS import (
     DynamicBicycle,
 )
+
+from minilink.core.diagram import DiagramSystem
+from minilink.core.system import DynamicSystem, System
 from minilink.graphical.animation.primitives import camera_matrix
 
 U_REF = 5.0
@@ -79,7 +79,7 @@ class SpeedReference(System):
 
 
 class VelocityPID(DynamicSystem):
-    """PI + derivative-on-measurement for ``w_rear`` rear wheel rate.
+    """PI + derivative-on-measurement for ``w_motor`` rear wheel rate.
 
     State ``x = [int_e, u_filt]``:
     - ``int_e``: integral of speed error
@@ -91,7 +91,7 @@ class VelocityPID(DynamicSystem):
 
     The controller computes:
 
-    ``w_rear = u_ref / r_rear + PID correction``
+    ``w_motor = u_ref / r_rear + PID correction``
     """
 
     def __init__(self, r_rear: float):
@@ -119,7 +119,7 @@ class VelocityPID(DynamicSystem):
         self.outputs = {}
         self.add_output_port(
             1,
-            "w_rear",
+            "w_motor",
             function=self.h_w,
             dependencies=["u_ref", "y"],
         )
@@ -210,7 +210,7 @@ def main():
 
     diagram.connect("speed_ref", "u_ref", "vel_pid", "u_ref")
     diagram.connect("vehicle", "y", "vel_pid", "y")
-    diagram.connect("vel_pid", "w_rear", "vehicle", "w_rear")
+    diagram.connect("vel_pid", "w_motor", "vehicle", "w_motor")
 
     # No yaw-rate / steering controller.
     # If the vehicle's delta input has a nominal/default value, it will remain zero.

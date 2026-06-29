@@ -99,7 +99,7 @@ def main():
             0.0,  # vx
             0.0,  # vy
             0.0,  # r
-            0.0,  # w_rear
+            0.0,  # w_motor
             0.0,  # w_front
             0.0,  # tau_engine
             0.0,  # delta_act

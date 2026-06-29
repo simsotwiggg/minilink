@@ -65,8 +65,8 @@ def project_on_path_with_t(path_xy, x, y, closed=True):
     best = None
 
     for i, j in _iter_segments(path_xy, closed):
-        x0, y0 = path_xy[i]
-        x1, y1 = path_xy[j]
+        x0, y0 = path_xy[i]  # P0
+        x1, y1 = path_xy[j]  # P a +1
 
         qx, qy, t = _closest_point_on_segment(x, y, x0, y0, x1, y1)
 
@@ -115,6 +115,7 @@ def point_ahead_along_path(path_xy, idx, t, ds, closed=True):
     """
     Avance de ds mètres le long de la polyligne à partir de la projection.
     """
+    # Semble refaire beaucoup de calcul from "project_on_path_with_t"
 
     n = len(path_xy)
 
@@ -150,15 +151,18 @@ def point_ahead_along_path(path_xy, idx, t, ds, closed=True):
 
         seg_len = math.hypot(dx, dy)
 
+    # Point sur le vehicule projeter sur un segment du path
     cx = x0 + t * dx
     cy = y0 + t * dy
 
+    # Distance qui reste sur le segment
     rem = (1.0 - t) * seg_len
 
     steps = 0
     max_steps = len(path_xy) + 2
 
     while ds > rem and steps < max_steps:
+        # Si ds est plus grand que ce qui reste sur le segment passe au prochain
         ds -= rem
 
         i = (i + 1) % n
@@ -484,7 +488,7 @@ class Los(System):
             dependencies=["x", "y", "psi"],
         )
 
-    def los(self, u):
+    def los(self, x, u, t=0.0, params=None):
         """
         Fonction appelée par Minilink.
 

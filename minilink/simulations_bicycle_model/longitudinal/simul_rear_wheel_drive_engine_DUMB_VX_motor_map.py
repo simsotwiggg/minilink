@@ -69,7 +69,7 @@ def create_diagram(vehicle: DynamicBicycleRearWheelDriveEngine, vx_ref=VX_REF):
     diagram.connect("vehicle", "y", "speed_meas", "y")
 
     # Scalar measured acceleration into PID
-    diagram.connect("rear_speed_ref", "ref", "thr_map", "w_rear")
+    diagram.connect("rear_speed_ref", "ref", "thr_map", "w_motor")
 
     # PID command drives throttle
     diagram.connect("acc_to_force", "F_rear", "thr_map", "F_rear")

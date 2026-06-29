@@ -23,13 +23,6 @@ from minilink.simulations_bicycle_model.vehicule_helper import (
     create_vehicle,
 )
 
-# def wrap_pi(angle):
-#     """
-#     Ramène un angle dans [-pi, pi].
-#     Remplace simpleSpeedBoatSim._wrap_pi si non disponible.
-#     """
-#     return (angle + math.pi) % (2.0 * math.pi) - math.pi
-
 
 class PIDTheta(PID):
     def calculate_error(self, ref: float, meas: float, u) -> float:
@@ -42,7 +35,7 @@ path_raw = make_rectangle_path(Lx=40.0, Ly=20.0)
 path = make_rounded_rectangle_from_path(
     path_raw,
     R=7.0,
-    nseg=8,
+    nseg=2,
     narc=4,
     min_ds=0.1,
     closed=True,
@@ -152,7 +145,7 @@ def create_diagram(vehicle: DynamicBicycleRearWheelDriveEngine, vx_ref=1.0):
     diagram.connect("v_pid", "cmd", "acc_to_thr", "acc_targ")
 
     diagram.connect("acc_to_thr", "thr", "vehicle", "thr")
-    diagram.connect("full_state_meas", "w_r_meas", "acc_to_thr", "w_rear")
+    diagram.connect("full_state_meas", "w_r_meas", "acc_to_thr", "w_motor")
 
     return diagram
 
@@ -160,13 +153,13 @@ def create_diagram(vehicle: DynamicBicycleRearWheelDriveEngine, vx_ref=1.0):
 def main():
     vx = 10.0
 
-    vehicle = create_vehicle(Y=10.0, vx=0.0, theta=np.pi, tire_slip_mode="c")
+    vehicle = create_vehicle(Y=0.0, vx=0.0, theta=np.pi, tire_slip_mode=None)
 
     diagram = create_diagram(vehicle, vx_ref=vx)
 
     diagram.plot_diagram()
 
-    diagram.compute_trajectory(tf=30, dt=0.01)
+    diagram.compute_trajectory(tf=20, dt=0.01)
 
     x0 = float(vehicle.x0[0])
     y0 = float(vehicle.x0[1])
@@ -262,6 +255,16 @@ def main():
     x_ctrls = np.array(x_ctrls)
     y_ctrls = np.array(y_ctrls)
 
+    # Reconstruct internal signals to get time vector (fallback to uniform dt if unavailable)
+    try:
+        traj = diagram.reconstruct_internal_signals(diagram.traj)
+        t_ctrl = traj.t
+        if t_ctrl.shape[0] != x_ctrls.shape[0]:
+            t_ctrl = np.linspace(0.0, float(t_ctrl[-1]), num=x_ctrls.shape[0])
+    except Exception:
+        # Fallback: assume the compute_trajectory dt used above (0.01 s)
+        t_ctrl = np.arange(0, x_ctrls.shape[0]) * 0.01
+
     plt.figure()
     plt.plot(
         path[:, 0], path[:, 1], "-o", color="salmon", linewidth=1, label="LOS path"
@@ -289,26 +292,47 @@ def main():
     plt.axis("equal")
     plt.show()
 
-    # PID PLOTS
-    traj = diagram.reconstruct_internal_signals(diagram.traj)
-    pid_logs = traj.get_signal("theta_pid:logs")
+    # --- New: show control point components over time ---
+    # Print a few sample positions to console
+    try:
+        n_print = min(10, x_ctrls.size)
+        print("Control point positions over time (first {} samples):".format(n_print))
+        for i in range(n_print):
+            print(f"t={t_ctrl[i]:.3f}s: x={x_ctrls[i]:.3f}, y={y_ctrls[i]:.3f}")
+    except Exception:
+        pass
 
-    ref = pid_logs[0, :]
-    meas = pid_logs[1, :]
-
-    ref = np.unwrap(np.array(ref))
-
-    t = traj.t
-
+    # Plot x(t) and y(t)
     plt.figure()
-    plt.plot(t, ref, label="Goal Vehicule theta")
-    plt.plot(t, meas, label="Measured Vehicule theta")
+    plt.plot(t_ctrl, x_ctrls, label="x_ctrl (m)", color="tab:blue")
+    plt.plot(t_ctrl, y_ctrls, label="y_ctrl (m)", color="tab:orange")
     plt.xlabel("Time [s]")
-    plt.ylabel("Theta [rad]")
-    plt.title("Theta PID - Reference vs Measured")
+    plt.ylabel("Position [m]")
+    plt.title("LOS control point: x and y vs time")
     plt.legend()
     plt.grid(True)
     plt.show()
+
+    # PID PLOTS
+    # traj = diagram.reconstruct_internal_signals(diagram.traj)
+    # pid_logs = traj.get_signal("full_state_meas:r_meas")
+
+    # ref = pid_logs[0, :]
+    # # meas = pid_logs[1, :]
+
+    # ref = np.unwrap(np.array(ref))
+
+    # t = traj.t
+
+    # plt.figure()
+    # plt.plot(t, ref, label="w_motor")
+    # # plt.plot(t, meas, label="Measured Vehicule theta")
+    # plt.xlabel("Time [s]")
+    # plt.ylabel("Theta [rad]")
+    # plt.title("Theta PID - Reference vs Measured")
+    # plt.legend()
+    # plt.grid(True)
+    # plt.show()
 
     # Animation
 

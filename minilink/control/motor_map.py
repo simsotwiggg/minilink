@@ -12,14 +12,12 @@ class AccToThr(System):
         r_r: float,
         engine_power_peak: float,
         mass: float,
-        transmission_ratio: float = 1.0,
     ):
         super().__init__()
         self.name = "Acceleration to throttle map"
 
         self.r_r = r_r
         self.engine_power_peak = engine_power_peak
-        self.transmission_ratio = transmission_ratio
 
         self.mass = mass
 
@@ -30,7 +28,7 @@ class AccToThr(System):
         )
 
         self.add_input_port(
-            "w_rear",
+            "w_motor",
             nominal_value=np.array([0.0]),
         )
 
@@ -40,23 +38,22 @@ class AccToThr(System):
             "thr",
             dim=1,
             function=self.h_thr,
-            dependencies=["acc_targ", "w_rear"],
+            dependencies=["acc_targ", "w_motor"],
         )
 
-    def h_thr(self, u):
+    def h_thr(self, x, u, t=0.0, params=None):
         acc_targ = float(u[0])
-        w_rear = float(u[1])
+        w_motor = float(u[1])
 
         F_rear = self.mass * acc_targ
 
         # Ici j'assume que la roue ne glisse pas
         tau_rear_required = F_rear * self.r_r
 
-        w_rear_num = max(w_rear, 1.0)
-        w_moteur = w_rear_num * self.transmission_ratio
+        w_motor_num = max(w_motor, 1.0)
 
         # print(f"w_rear: {w_rear}, w_rear_num: {w_rear_num}")
-        max_engine_torque = self.engine_power_peak / w_moteur
+        max_engine_torque = self.engine_power_peak / w_motor_num
 
         thr = tau_rear_required / max_engine_torque
 

@@ -47,6 +47,10 @@ def precompute_path_geometry(path_xy, closed=True):
     dir_var_path = (dir_var_path + math.pi) % (2.0 * math.pi) - math.pi
 
     dist_path = np.hypot(dx, dy)
+
+    # dir_path -> direction des path (arrays)
+    # dir_var_path -> variation de la direction des path (arrays)
+    # dist_path -> distance des path(arrays)
     return dir_path, dir_var_path, dist_path
 
 
@@ -85,10 +89,16 @@ def compute_curve_demand_norm(
     max_steps = n if closed else max(1, n - i)
 
     while dist_ahead <= max_dist and steps < max_steps:
+        # Fait +1 ici donc regarde le prochain segment.
+        # a chaque prochain segment on additione au poids curve_raw
+        # Lorsque j'ai regarder un distance totale >= max_dist curve_raw "a le bon poids"
         i = (i + 1) % n
         steps += 1
 
         abs_dir_var = abs(float(dir_var_path[i]))
+        # Gain selon la longueur du segment du path
+        # plus il est court plus le gain est grand
+        # Le gain multiplie la variation du path
         gain = _interp_linear_with_zero_outside(dist_ahead, dist_lut, gain_lut)
         curve_raw += abs_dir_var * gain
 

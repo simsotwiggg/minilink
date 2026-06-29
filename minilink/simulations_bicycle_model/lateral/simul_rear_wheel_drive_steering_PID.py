@@ -92,7 +92,7 @@ def create_diagram(
     diagram.connect("r_pid", "cmd", "vehicle", "delta")
     diagram.connect("acc_to_force", "F_rear", "thr_map", "F_rear")
     diagram.connect("thr_map", "thr", "vehicle", "thr")
-    diagram.connect("rear_speed_meas", "meas", "thr_map", "w_rear")
+    diagram.connect("rear_speed_meas", "meas", "thr_map", "w_motor")
 
     return diagram
 

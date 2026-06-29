@@ -12,12 +12,12 @@ class PID(DynamicSystem):
         Kp: float = 1.0,
         Ki: float = 0.0,
         Kd: float = 0.0,
-        tau: float = 0.1,
-        meas0: float = 0.0,
         cmd_min: float = -np.inf,
         cmd_max: float = np.inf,
         i_min: float = -np.inf,
         i_max: float = np.inf,
+        tau: float = 0.1,
+        meas0: float = 0.0,
         name: str = "PID",
     ):
         super().__init__(2)
@@ -27,11 +27,11 @@ class PID(DynamicSystem):
             "Kp": Kp,
             "Ki": Ki,
             "Kd": Kd,
-            "tau": tau,
             "cmd_min": cmd_min,
             "cmd_max": cmd_max,
             "i_min": i_min,
             "i_max": i_max,
+            "tau": tau,
         }
         self.state.labels = ["int_e", "meas_filt"]
         self.x0 = np.array([0.0, meas0], dtype=float)
@@ -143,5 +143,5 @@ class PID(DynamicSystem):
     def get_kinematic_geometry(self):
         return []
 
-    def get_kinematic_transforms(self, _x, _u, _t):
+    def get_kinematic_transforms(self, x, u, t):
         return []

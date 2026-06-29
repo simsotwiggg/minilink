@@ -175,7 +175,7 @@ def create_diagram(vehicle: DynamicBicycleRearWheelDriveEngine, vx_ref=1.0):
     diagram.connect("v_pid", "cmd", "acc_to_thr", "acc_targ")
 
     diagram.connect("acc_to_thr", "thr", "vehicle", "thr")
-    diagram.connect("full_state_meas", "w_r_meas", "acc_to_thr", "w_rear")
+    diagram.connect("full_state_meas", "w_r_meas", "acc_to_thr", "w_motor")
 
     return diagram
 

@@ -70,7 +70,7 @@ def create_diagram(vehicle: DynamicBicycleRearWheelDriveEngine, vx_ref=VX_REF):
     diagram.connect("vehicle", "y", "speed_meas", "y")
     diagram.connect("vehicle", "y", "rear_speed_meas", "y")
 
-    diagram.connect("rear_speed_meas", "meas", "thr_map", "w_rear")
+    diagram.connect("rear_speed_meas", "meas", "thr_map", "w_motor")
 
     diagram.connect("acc_to_force", "F_rear", "thr_map", "F_rear")
     diagram.connect("thr_map", "thr", "vehicle", "thr")

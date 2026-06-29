@@ -164,7 +164,7 @@ def main():
     path = make_rounded_rectangle_from_path(
         path_raw,
         R=5.0,
-        nseg=4,
+        nseg=1,
         narc=2,
         min_ds=0.10,
         closed=True,
@@ -173,13 +173,13 @@ def main():
     plt.figure(figsize=(10, 5))
 
     plt.plot(path[:, 0], path[:, 1], "-o", markersize=3)
-    plt.plot(
-        path_raw[:, 0],
-        path_raw[:, 1],
-        "-o",
-        color="gray",
-        linewidth=2,
-    )
+    # plt.plot(
+    #     path_raw[:, 0],
+    #     path_raw[:, 1],
+    #     "-o",
+    #     color="gray",
+    #     linewidth=2,
+    # )
 
     plt.axis("equal")
     plt.grid(True)
