@@ -677,6 +677,7 @@ class DynamicBicycleRearWheelDriveEngine(DynamicBicycleRearWheelDrive):
 
         self.engine_dry_resistance = 8.0  # N/m
         self.engine_rolling_resistance = 0.025  # N/m/rad/s
+        self.engine_viscous_resistance = 0.008  # N/m/rad/s^2
 
         self.engine_tau = 0.25
         self.steering_tau = 0.15
@@ -718,6 +719,7 @@ class DynamicBicycleRearWheelDriveEngine(DynamicBicycleRearWheelDrive):
 
         v = [vx, vy, r, w_rear, w_front]
         """
+        # TODO: UTILISER W_MOTEUR PAS ROUEs
         w_rear = v[3]  # rad/s
 
         # Clamp throttle
@@ -735,6 +737,7 @@ class DynamicBicycleRearWheelDriveEngine(DynamicBicycleRearWheelDrive):
                 tau_rear
                 - self.engine_dry_resistance * np.sign(w_moteur)
                 - self.engine_rolling_resistance * w_moteur
+                - (self.engine_viscous_resistance * w_moteur) ** 2
             )
 
         return tau_rear

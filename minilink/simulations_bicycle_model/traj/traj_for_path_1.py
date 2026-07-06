@@ -50,7 +50,6 @@ def create_diagram(vehicle: DynamicBicycleRearWheelDriveEngine, vx_ref=1.0):
 
     los_system = Los(
         path_pts=path,
-        vx_nom=vx_ref,
         Delta=8.0,
         omega_n=1.2,
         control_point_ahead=vehicle.a + 0.5,

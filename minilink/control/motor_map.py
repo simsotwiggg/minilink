@@ -159,7 +159,7 @@ class ThrMap(System):
     def get_kinematic_geometry(self):
         return []
 
-    def get_kinematic_transforms(self, _x, _u, _t):
+    def get_kinematic_transforms(self, x, u, t):
         return []
 
 
@@ -203,5 +203,5 @@ class AccToRearForce(System):
     def get_kinematic_geometry(self):
         return []
 
-    def get_kinematic_transforms(self, _x, _u, _t):
+    def get_kinematic_transforms(self, x, u, t):
         return []

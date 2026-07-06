@@ -276,161 +276,6 @@ class LOSController:
 # ============================================================
 
 
-class LosSL(System):
-    """
-    Bloc Minilink qui wrap le contrôleur LOS.
-
-    Sortie:
-        los[0] = vx_ref
-        los[1] = chi_d
-    """
-
-    def __init__(
-        self,
-        path_pts,
-        vx_nom=1.0,
-        Delta=1.0,
-        zeta=0.7,
-        omega_n=1.2,
-        control_point_ahead=0.5,
-        closed=False,
-    ):
-        super().__init__(0)
-
-        self.name = "Los"
-
-        self.path_pts = np.asarray(path_pts, dtype=float)
-
-        # self.chi_ref = 0.0
-
-        # On garde seulement x, y si les points sont en 3D.
-        if self.path_pts.shape[1] >= 2:
-            self.path_xy = self.path_pts[:, :2]
-        else:
-            raise ValueError("path_pts doit contenir au moins deux colonnes: x, y.")
-
-        self.controller = LOSController(
-            path_xy=self.path_xy,
-            Delta=Delta,
-            control_point_ahead=control_point_ahead,
-            closed=closed,
-        )
-
-        self.inputs = {}
-        self.add_input_port("x", nominal_value=np.array([0.0]))
-        self.add_input_port("y", nominal_value=np.array([0.0]))
-        self.add_input_port("psi", nominal_value=np.array([0.0]))
-
-        self.add_output_port(
-            "theta",
-            dim=1,
-            function=self.los,
-            dependencies=["x", "y", "psi"],
-        )
-
-        # self.add_output_port(
-        #     "U",
-        #     dim=1,
-        #     function=self.u_speed,
-        #     dependencies=["x", "y", "psi"],
-        # )
-
-        self.add_output_port(
-            "logs",
-            dim=1,
-            function=self.logs,
-            dependencies=["x", "y", "psi"],
-        )
-
-    def los(self, u):
-        """
-        Fonction appelée par Minilink.
-
-        Hypothèse sur l'état:
-            x[0] = position x
-            x[1] = position y
-            x[2] = psi
-            x[3] = u, optionnel
-            x[4] = v, optionnel
-            x[5] = r, optionnel
-        """
-
-        px = float(u[0])
-        py = float(u[1])
-        psi = float(u[2])
-
-        chi_ref, _ = self.controller.compute(
-            px,
-            py,
-            psi,
-        )
-        # self.chi_ref = chi_ref
-        return np.array([chi_ref], dtype=float)
-
-    # def u_speed(self, x, u, t=0.0, params=None):
-    #     print(self.chi_ref)
-
-    def logs(self, u):
-
-        px = float(u[0])
-        py = float(u[1])
-        psi = float(u[2])
-
-        _, info = self.controller.compute(
-            px,
-            py,
-            psi,
-        )
-
-        idx = info["idx"]
-        return np.array([idx], dtype=float)
-
-    def get_kinematic_geometry(self):
-        """
-        Return the graphical primitives used to display LOS geometry.
-
-        Green point = control point
-        Red point   = lookahead point
-        """
-
-        return [
-            Point(
-                pt=[0.0, 0.0, 0.0],
-                color="orange",
-                marker="o",
-                size=4,
-            ),
-            Point(
-                pt=[0.0, 0.0, 0.0],
-                color="red",
-                marker="o",
-                size=4,
-            ),
-        ]
-
-    def get_kinematic_transforms(self, x, u, t):
-        """
-        Position the two LOS points in the world frame.
-        """
-
-        px = float(u[0])
-        py = float(u[1])
-        psi = float(u[2])
-
-        _, info = self.controller.compute(px, py, psi)
-
-        x_ctrl = info["x_ctrl"]
-        y_ctrl = info["y_ctrl"]
-
-        ax = info["ax"]
-        ay = info["ay"]
-
-        return [
-            pose2d_matrix(x=x_ctrl, y=y_ctrl, theta=0.0),
-            pose2d_matrix(x=ax, y=ay, theta=0.0),
-        ]
-
-
 class Los(System):
     """
     Bloc Minilink qui wrap le contrôleur LOS.
@@ -443,7 +288,6 @@ class Los(System):
     def __init__(
         self,
         path_pts,
-        vx_nom=1.0,
         Delta=1.0,
         zeta=0.7,
         omega_n=1.2,
@@ -600,7 +444,6 @@ pts = np.array(
 def main():
     los_system = Los(
         path_pts=pts,
-        vx_nom=1.0,
         Delta=1.0,
         zeta=0.7,
         omega_n=1.2,

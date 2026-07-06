@@ -65,17 +65,45 @@ def create_vehicle(X=0.0, Y=0.0, theta=0.0, vx=0.0, vy=0.0, r=0.0, tire_slip_mod
     vehicle.gravity = 9.81
     vehicle.rho = 1.225
 
-    vehicle.CdA = 0.0
+    # VERIFIER
+    vehicle.CdA = 3.0
 
-    vehicle.tire_model_f = Pacejka(combined_slip_mode=tire_slip_mode)
-    vehicle.tire_model_r = Pacejka(combined_slip_mode=tire_slip_mode)
+    # From tire_coef_from_unity_def.py A VERIFIER
+    Bt = 0.422
+    Ct = 1.63
+    Dt = 1.256
+    Et = -1.03
+
+    vehicle.tire_model_f = Pacejka(
+        Bx=Bt,
+        Cx=Ct,
+        Dx=Dt,
+        Ex=Et,
+        By=Bt,
+        Cy=Ct,
+        Dy=Dt,
+        Ey=Et,
+        combined_slip_mode=tire_slip_mode,
+    )
+    vehicle.tire_model_r = Pacejka(
+        Bx=Bt,
+        Cx=Ct,
+        Dx=Dt,
+        Ex=Et,
+        By=Bt,
+        Cy=Ct,
+        Dy=Dt,
+        Ey=Et,
+        combined_slip_mode=tire_slip_mode,
+    )
 
     vehicle.engine_power_peak = 172.5 * 1e3
 
     vehicle.transmission_ratio = 1.0
 
-    vehicle.engine_dry_resistance = 8.0
-    vehicle.engine_rolling_resistance = 0.025
+    vehicle.engine_dry_resistance = 49.99
+    vehicle.engine_rolling_resistance = 0.045
+    vehicle.engine_viscous_resistance = 0.008
 
     vehicle.engine_tau = 0.25
     vehicle.steering_tau = 0.15
