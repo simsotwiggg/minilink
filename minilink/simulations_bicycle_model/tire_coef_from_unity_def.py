@@ -3,93 +3,69 @@ import numpy as np
 from scipy.optimize import differential_evolution, least_squares
 
 # ------------------------------------------------------------
-# Input data from the VPP slip-velocity curve
+# VPP data
 # ------------------------------------------------------------
-# x = slip velocity [m/s]
-# mu = tire friction coefficient [-]
+# x_data = longitudinal slip speed [m/s]
+# mu_data = friction coefficient [-]
 
 x_data = np.array([0.0, 1.37, 3.0, 6.0])
 mu_data = np.array([0.0, 1.00, 1.25, 1.05])
 
 # ------------------------------------------------------------
-# Vehicle reference speed
-# ------------------------------------------------------------
-# Needed to convert slip velocity into slip angle:
-#
-# alpha = atan(x / V)
-#
-# Change this value to the speed used for your tire model / VPP conversion.
-
-V_vehicle = 20.0  # [m/s], example: 20 m/s = 72 km/h
-
-
-# ------------------------------------------------------------
-# Convert slip velocity to lateral slip angle
+# Reference vehicle speed
 # ------------------------------------------------------------
 
+V_vehicle = 20.0  # [m/s]
 
-def slip_velocity_to_angle_rad(x, V):
-    return np.arctan(x / V)
+# ------------------------------------------------------------
+# Convert slip speed to longitudinal tire slip κ
+# ------------------------------------------------------------
+
+kappa_data = x_data / V_vehicle
+
+print("Converted data:")
+for x, kappa, mu in zip(x_data, kappa_data, mu_data):
+    print(f"slip speed = {x:5.2f} m/s | kappa = {kappa:7.4f} | mu = {mu:.3f}")
+
+# ------------------------------------------------------------
+# Longitudinal Pacejka model
+# ------------------------------------------------------------
+# μ(κ) = D * sin(C * atan(Bκ - E(Bκ - atan(Bκ))))
 
 
-def slip_velocity_to_angle_deg(x, V):
-    return np.degrees(slip_velocity_to_angle_rad(x, V))
-
-
-alpha_data_rad = slip_velocity_to_angle_rad(x_data, V_vehicle)
-alpha_data_deg = slip_velocity_to_angle_deg(x_data, V_vehicle)
+def pacejka_mu_kappa(kappa, B, C, D, E):
+    return D * np.sin(C * np.arctan(B * kappa - E * (B * kappa - np.arctan(B * kappa))))
 
 
 # ------------------------------------------------------------
-# Simplified Pacejka / Magic Formula model
+# Residuals
 # ------------------------------------------------------------
-# mu(x) = D * sin(C * atan(B*x - E*(B*x - atan(B*x))))
-#
-# Here x is slip velocity [m/s].
-#
-# B = stiffness factor
-# C = shape factor
-# D = peak/friction scale
-# E = curvature factor
-
-
-def pacejka_mu(x, B, C, D, E):
-    return D * np.sin(C * np.arctan(B * x - E * (B * x - np.arctan(B * x))))
-
-
-# ------------------------------------------------------------
-# Residual function for curve fitting
-# ------------------------------------------------------------
+# This is where the fitting happens.
+# IMPORTANT: use kappa_data, not x_data.
 
 
 def residuals(params):
     B, C, D, E = params
-    mu_fit = pacejka_mu(x_data, B, C, D, E)
+    mu_fit = pacejka_mu_kappa(kappa_data, B, C, D, E)
     return mu_fit - mu_data
 
 
 # ------------------------------------------------------------
-# Parameter bounds
+# Bounds
 # ------------------------------------------------------------
 
 lower_bounds = [0.001, 0.1, 0.1, -5.0]
-upper_bounds = [20.0, 3.0, 3.0, 5.0]
+upper_bounds = [500.0, 3.0, 3.0, 5.0]
 
 bounds = list(zip(lower_bounds, upper_bounds))
 
-
 # ------------------------------------------------------------
-# Step 1: Global optimization
+# Optimization
 # ------------------------------------------------------------
 
 global_result = differential_evolution(
     lambda p: np.sum(residuals(p) ** 2), bounds=bounds, seed=1, tol=1e-10
 )
-
-
-# ------------------------------------------------------------
-# Step 2: Local least-squares refinement
-# ------------------------------------------------------------
 
 local_result = least_squares(
     residuals,
@@ -101,60 +77,57 @@ local_result = least_squares(
     max_nfev=100000,
 )
 
-
-# ------------------------------------------------------------
-# Extract fitted parameters
-# ------------------------------------------------------------
-
 B, C, D, E = local_result.x
 
-print("Fitted Pacejka coefficients:")
+print("\nFitted Pacejka coefficients:")
 print(f"B = {B:.6f}")
 print(f"C = {C:.6f}")
 print(f"D = {D:.6f}")
 print(f"E = {E:.6f}")
 
-print("\nComparison with target data:")
-for x, alpha_deg, mu_target in zip(x_data, alpha_data_deg, mu_data):
-    mu_fit = pacejka_mu(x, B, C, D, E)
+print("\nComparison:")
+for x, kappa, mu_target in zip(x_data, kappa_data, mu_data):
+    mu_fit = pacejka_mu_kappa(kappa, B, C, D, E)
+
     print(
-        f"x = {x:5.2f} m/s | "
-        f"alpha = {alpha_deg:6.2f} deg | "
+        f"slip speed = {x:5.2f} m/s | "
+        f"kappa = {kappa:7.4f} | "
+        f"kappa = {100 * kappa:6.2f}% | "
         f"target mu = {mu_target:6.3f} | "
-        f"fitted mu = {mu_fit:6.3f}"
+        f"fit mu = {mu_fit:6.3f}"
     )
 
-
 # ------------------------------------------------------------
-# Plot versus slip velocity
+# Plot versus κ
 # ------------------------------------------------------------
 
-x_plot = np.linspace(0, 8, 300)
-mu_plot = pacejka_mu(x_plot, B, C, D, E)
+kappa_plot = np.linspace(0.0, 0.4, 300)
+mu_plot = pacejka_mu_kappa(kappa_plot, B, C, D, E)
 
 plt.figure()
-plt.plot(x_plot, mu_plot, label="Fitted Pacejka curve")
-plt.scatter(x_data, mu_data, color="red", label="Target VPP points")
-plt.xlabel("Slip velocity x [m/s]")
+plt.plot(100 * kappa_plot, mu_plot, label="Fitted Pacejka curve")
+plt.scatter(100 * kappa_data, mu_data, color="red", label="VPP data converted to κ")
+plt.xlabel("Longitudinal slip κ [%]")
 plt.ylabel("Friction coefficient μ [-]")
-plt.title("Pacejka Fit to Slip-Velocity Curve")
+plt.title("Longitudinal Pacejka Fit")
 plt.grid(True)
 plt.legend()
 plt.show()
 
-
 # ------------------------------------------------------------
-# Plot versus lateral slip angle
+# Optional: plot same model versus original slip speed
 # ------------------------------------------------------------
 
-alpha_plot_deg = slip_velocity_to_angle_deg(x_plot, V_vehicle)
+x_plot = np.linspace(0.0, 8.0, 300)
+kappa_from_speed = x_plot / V_vehicle
+mu_from_speed = pacejka_mu_kappa(kappa_from_speed, B, C, D, E)
 
 plt.figure()
-plt.plot(alpha_plot_deg, mu_plot, label="Fitted Pacejka curve")
-plt.scatter(alpha_data_deg, mu_data, color="red", label="Target VPP points")
-plt.xlabel("Slip angle α [deg]")
+plt.plot(x_plot, mu_from_speed, label="Fitted Pacejka curve")
+plt.scatter(x_data, mu_data, color="red", label="Original VPP points")
+plt.xlabel("Longitudinal slip speed [m/s]")
 plt.ylabel("Friction coefficient μ [-]")
-plt.title(f"Pacejka Fit Relative to Slip Angle, V = {V_vehicle:.1f} m/s")
+plt.title(f"Same Pacejka Fit Re-Plotted vs Slip Speed, V = {V_vehicle:.1f} m/s")
 plt.grid(True)
 plt.legend()
 plt.show()
