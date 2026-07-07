@@ -52,6 +52,8 @@ def create_vehicle(X=0.0, Y=0.0, theta=0.0, vx=0.0, vy=0.0, r=0.0, tire_slip_mod
     vehicle.bw_rear = 0.0
     vehicle.bw_front = 0.0
 
+    vehicle.rolling_friction_constant = 0.1
+
     vehicle.Jw_rear = 1.72 * 2
     vehicle.Jw_front = 1.72 * 2
 

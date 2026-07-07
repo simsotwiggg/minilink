@@ -388,6 +388,9 @@ class DynamicBicycleRearWheelDrive(DynamicBicycleMagicForces):
         self.bw_rear = 0.0
         self.bw_front = 0.0
 
+        # Params utiliser dans Unity
+        self.rolling_friction_constant = 0.0
+
         # Wheel inertias
         self.Jw_rear = 1.0
         self.Jw_front = 1.0
@@ -542,9 +545,14 @@ class DynamicBicycleRearWheelDrive(DynamicBicycleMagicForces):
         F_aero = 0.5 * self.rho * self.CdA * v[0] * abs(v[0])
         Sum_Fx -= F_aero
 
+        # TODO: ENLEVER OU PARAMETRISER
+        Fz_f = self.mass * self.gravity * (self.b / self.L)
+        Fz_r = self.mass * self.gravity * (self.a / self.L)
+        
         # wheel resisting torques from tire longitudinal forces + viscous damping
-        Tau_load_rear = self.r_r * Fx_rear + self.bw_rear * w_rear
-        Tau_load_front = self.r_f * Fx_front + self.bw_front * w_front
+        # Fx_rear et Fx_front ne sont pas = 0.0 lorsque w_rear est tres petit. Pour ctte raison le vehicule semble reculer lorsque ce n'est pas physiquement possible
+        Tau_load_rear = self.r_r * Fx_rear + self.bw_rear * w_rear + self.rolling_friction_constant * Fz_r * np.sign(w_rear)
+        Tau_load_front = self.r_f * Fx_front + self.bw_front * w_front + self.rolling_friction_constant * Fz_f * np.sign(w_rear)
 
         Q_ext = np.array([Sum_Fx, Sum_Fy, Sum_Mz, -Tau_load_rear, -Tau_load_front])
 
