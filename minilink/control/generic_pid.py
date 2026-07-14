@@ -138,7 +138,7 @@ class PID(DynamicSystem):
 
         cmd = np.clip(cmd, p["cmd_min"], p["cmd_max"])
 
-        return np.array([e, d_filt, int_e], dtype=float)
+        return np.array([e, d_filt, int_e, cmd], dtype=float)
 
     def get_kinematic_geometry(self):
         return []

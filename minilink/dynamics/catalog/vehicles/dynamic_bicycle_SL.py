@@ -548,11 +548,19 @@ class DynamicBicycleRearWheelDrive(DynamicBicycleMagicForces):
         # TODO: ENLEVER OU PARAMETRISER
         Fz_f = self.mass * self.gravity * (self.b / self.L)
         Fz_r = self.mass * self.gravity * (self.a / self.L)
-        
+
         # wheel resisting torques from tire longitudinal forces + viscous damping
         # Fx_rear et Fx_front ne sont pas = 0.0 lorsque w_rear est tres petit. Pour ctte raison le vehicule semble reculer lorsque ce n'est pas physiquement possible
-        Tau_load_rear = self.r_r * Fx_rear + self.bw_rear * w_rear + self.rolling_friction_constant * Fz_r * np.sign(w_rear)
-        Tau_load_front = self.r_f * Fx_front + self.bw_front * w_front + self.rolling_friction_constant * Fz_f * np.sign(w_rear)
+        Tau_load_rear = (
+            self.r_r * Fx_rear
+            + self.bw_rear * w_rear
+            + self.rolling_friction_constant * Fz_r * np.sign(w_rear)
+        )
+        Tau_load_front = (
+            self.r_f * Fx_front
+            + self.bw_front * w_front
+            + self.rolling_friction_constant * Fz_f * np.sign(w_rear)
+        )
 
         Q_ext = np.array([Sum_Fx, Sum_Fy, Sum_Mz, -Tau_load_rear, -Tau_load_front])
 
