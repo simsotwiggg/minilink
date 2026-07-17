@@ -58,7 +58,7 @@ class PID(DynamicSystem):
 
         self.add_output_port(
             "pid_int_value",
-            dim=3,
+            dim=4,
             function=self.int_vars,
             dependencies=["ref", "meas", "feedfoward"],
         )
