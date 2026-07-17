@@ -94,7 +94,10 @@ class PolylinePath(ReferencePath):
         denom = xp.sum(ab * ab, axis=-1)
         tau = xp.clip(xp.sum(ap * ab, axis=-1) / xp.maximum(denom, 1e-12), 0.0, 1.0)
         closest = a + ab * tau[:, xp.newaxis]
-        dist = xp.linalg.norm(p - closest, axis=-1)
+        # sqrt(max(d2, eps)) keeps the gradient finite (zero) for points on the
+        # centerline, where the gradient of norm(0) is NaN under autodiff.
+        d2 = xp.sum((p - closest) ** 2, axis=-1)
+        dist = xp.sqrt(xp.maximum(d2, 1e-16))
         return xp.min(dist)
 
     def project(self, p, t=0.0, params=None):
