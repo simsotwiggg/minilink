@@ -43,6 +43,9 @@ cost = QuadraticCost.from_system(
     xbar=x_ref,
     ubar=ubar,
 )
+
+print(f"Cost: {cost}")
+
 problem = PlanningProblem(
     sys=sys,
     tf=TF,
