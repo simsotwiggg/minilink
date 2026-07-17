@@ -47,7 +47,18 @@ class PIDTheta(PID):
         i_max: float = np.inf,
         name: str = "PID",
     ):
-        super().__init__(Kp, Ki, Kd, tau, meas0, cmd_min, cmd_max, i_min, i_max, name)
+        super().__init__(
+            Kp=Kp,
+            Ki=Ki,
+            Kd=Kd,
+            cmd_min=cmd_min,
+            cmd_max=cmd_max,
+            i_min=i_min,
+            i_max=i_max,
+            tau=tau,
+            meas0=meas0,
+            name=name,
+        )
 
         self.add_input_port("u_meas", nominal_value=np.array([0.0]))
         self.add_input_port("v_meas", nominal_value=np.array([0.0]))
@@ -186,8 +197,8 @@ def create_diagram(vehicle: DynamicBicycleRearWheelDriveEngine, vx_ref=1.0):
     diagram.connect("full_state_meas", "theta_meas", "los_system", "psi")
     diagram.connect("full_state_meas", "y_meas", "los_system", "y")
     diagram.connect("full_state_meas", "x_meas", "los_system", "x")
-    diagram.connect("full_state_meas", "u_meas", "theta_pid", "u_meas")
-    diagram.connect("full_state_meas", "v_meas", "theta_pid", "v_meas")
+    # diagram.connect("full_state_meas", "u_meas", "theta_pid", "u_meas")
+    # diagram.connect("full_state_meas", "v_meas", "theta_pid", "v_meas")
 
     diagram.connect("r_to_steering", "delta", "r_pid", "feedfoward")
 
@@ -347,7 +358,7 @@ def main():
 
     # # PID PLOTS
     traj = diagram.reconstruct_internal_signals(diagram.traj)
-    pid_logs = traj.get_signal("v_pid:logs")
+    pid_logs = traj.get_signal("theta_pid:logs")
 
     ref = pid_logs[0, :]
     meas = pid_logs[1, :]
@@ -379,7 +390,7 @@ def main():
     animator.animate_simulation(
         diagram.traj,
         renderer="matplotlib",
-        save=True,
+        save=False,
         file_name="traj_for_path_1_COUPLED",
         show=True,
     )
