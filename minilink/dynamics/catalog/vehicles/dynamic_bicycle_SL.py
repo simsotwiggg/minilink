@@ -20,8 +20,8 @@ from minilink.graphical.animation.primitives import (
     Arrow,
     CustomLine,
     camera_matrix,
-    pose2d_matrix,
-    scale_pose2d_matrix,
+    # pose2d_matrix,
+    # scale_pose2d_matrix,
 )
 
 
@@ -276,28 +276,28 @@ class DynamicBicycleMagicForces(DynamicSystem):
 
         return Fx_f_b, Fy_f_b, Fx_r_b, Fy_r_b
 
-    def _world_arrow_pose(
-        self, dx: float, dy: float, px: float, py: float, v_scale: float = 0.2
-    ):
-        mag = v_scale * np.hypot(dx, dy)
-        if mag < 1e-9:
-            mag = 1e-9
-        th = np.arctan2(dy, dx)
-        return scale_pose2d_matrix(px, py, th, mag)
+    # def _world_arrow_pose(
+    #     self, dx: float, dy: float, px: float, py: float, v_scale: float = 0.2
+    # ):
+    #     mag = v_scale * np.hypot(dx, dy)
+    #     if mag < 1e-9:
+    #         mag = 1e-9
+    #     th = np.arctan2(dy, dx)
+    #     return scale_pose2d_matrix(px, py, th, mag)
 
-    def _force_pose(
-        self, Fx: float, Fy: float, px: float, py: float, f_scale: float = 0.001
-    ):
-        mag = f_scale * np.hypot(Fx, Fy)
-        if mag < 1e-12:
-            mag = 1e-12
-        th = np.arctan2(Fy, Fx)
-        return scale_pose2d_matrix(px, py, th, mag)
+    # def _force_pose(
+    #     self, Fx: float, Fy: float, px: float, py: float, f_scale: float = 0.001
+    # ):
+    #     mag = f_scale * np.hypot(Fx, Fy)
+    #     if mag < 1e-12:
+    #         mag = 1e-12
+    #     th = np.arctan2(Fy, Fx)
+    #     return scale_pose2d_matrix(px, py, th, mag)
 
     def get_u_int(self, x: np.ndarray, u: np.ndarray) -> np.ndarray:
         return u
 
-    def get_kinematic_transforms(self, x: np.ndarray, u: np.ndarray, t: float):
+    # def get_kinematic_transforms(self, x: np.ndarray, u: np.ndarray, t: float):
         X, Y, Theta = float(x[0]), float(x[1]), float(x[2])
         _, vb = self.x2q(x)
         u_in = self.get_u_int(x, u)
