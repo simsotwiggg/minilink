@@ -66,7 +66,7 @@ Release criteria (unchanged): every **in-scope** pyro library module has a minil
 | Catalog | `pyro/dynamic/rocket.py` | Rocket | `minilink/dynamics/catalog/aerial/rocket.py` | Rocket | **Done** |  |
 | Catalog | `pyro/dynamic/suspension.py` | QuarterCarOnRoughTerrain | `minilink/dynamics/catalog/vehicles/suspension.py` | QuarterCarOnRoughTerrain | **Done** |  |
 | Catalog | `pyro/dynamic/vehicle_dynamic.py` | TireModel (ABC) | `minilink/dynamics/catalog/vehicles/dynamic_bicycle.py` | — | **Partial** | Only LinearTire implemented |
-| Catalog | `pyro/dynamic/vehicle_dynamic.py` | LinearTire | `minilink/dynamics/catalog/vehicles/dynamic_bicycle.py` | LinearTire (+ JaxLinearTire) | **Done** |  |
+| Catalog | `pyro/dynamic/vehicle_dynamic.py` | LinearTire | `minilink/dynamics/catalog/vehicles/dynamic_bicycle.py` | LinearTire (+ LinearTire) | **Done** |  |
 | Catalog | `pyro/dynamic/vehicle_dynamic.py` | Pacejka | `—` | — | **TODO** | ROADMAP §5.8 review queue |
 | Catalog | `pyro/dynamic/vehicle_dynamic.py` | DynamicBicycle | `minilink/dynamics/catalog/vehicles/dynamic_bicycle.py` | DynamicBicycle (+ JAX twins, rate inputs) | **Done** | Minilink adds rate-input variant |
 | Catalog | `pyro/dynamic/vehicle_propulsion.py` | LongitudinalFrontWheelDriveCarWithWheelSlipInput | `minilink/dynamics/catalog/vehicles/propulsion.py` | same | **Done** |  |
@@ -438,13 +438,14 @@ These are minilink-native; they may cover pyro workflows without 1:1 filename pa
 
 | Notebook |
 | --- |
-| `examples/notebooks/demo_mpc_circuit.ipynb` |
-| `examples/notebooks/demo_optimization.ipynb` |
-| `examples/notebooks/demo_overview.ipynb` |
-| `examples/notebooks/demo_plots_animations_backends.ipynb` |
-| `examples/notebooks/demo_showcase.ipynb` |
-| `examples/notebooks/demo_stateless_functional_jax.ipynb` |
-| `examples/notebooks/simulation_benchmark.ipynb` |
+| `examples/notebooks/applications/mpc.ipynb` |
+| `examples/notebooks/applications/car_trajopt.ipynb` |
+| `examples/notebooks/intro/08_optimization.ipynb` |
+| `examples/notebooks/intro/10_graphical.ipynb` |
+| `examples/notebooks/intro/07_compile.ipynb` |
+| `examples/notebooks/showcase/minilink.ipynb` |
+| `examples/notebooks/showcase/jax.ipynb` |
+| `examples/notebooks/tooling/benchmark.ipynb` |
 
 ---
 
