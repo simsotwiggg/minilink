@@ -1,14 +1,9 @@
 import numpy as np
 
 from minilink.core.costs import QuadraticCost
-from minilink.dynamics.catalog.vehicles.dynamic_bicycle import JaxDynamicBicycle
+from minilink.dynamics.catalog.vehicles.jax_vehicles import BicycleDynPorts
 from minilink.planning.problems import PlanningProblem
-from minilink.planning.trajectory_optimization.direct_collocation import (
-    DirectCollocationOptions,
-    DirectCollocationTranscription,
-)
 from minilink.planning.trajectory_optimization.planner import (
-    TrajectoryOptimizationOptions,
     TrajectoryOptimizationPlanner,
 )
 
@@ -23,7 +18,7 @@ Y_GOAL = 15.0
 W_REAR_MAX = 30.0
 DELTA_MAX = 0.8
 
-sys = JaxDynamicBicycle()
+sys = BicycleDynPorts()
 sys.inputs["w_rear"].lower_bound[0] = W_REAR_MAX
 sys.inputs["w_rear"].upper_bound[0] = W_REAR_MAX
 sys.inputs["delta"].lower_bound[0] = -DELTA_MAX
@@ -50,33 +45,26 @@ cost = QuadraticCost.from_system(
 )
 problem = PlanningProblem(
     sys=sys,
+    tf=TF,
     x_start=x_start,
     cost=cost,
 )
 
 planner = TrajectoryOptimizationPlanner(
     problem,
-    transcription=DirectCollocationTranscription(
-        DirectCollocationOptions(
-            tf=TF,
-            n_steps=N_STEPS,
-        )
-    ),
-    options=TrajectoryOptimizationOptions(
-        compile_backend="jax",
-        # optimizer_method="ipopt",
-        solve_disp=PRINT_SOLVE_REPORT,
-        optimizer_options={
-            "disp": SCIPY_DISP,
-            "maxiter": 500,
-            "ftol": 1e-1,
-        },
-    ),
+    n_steps=N_STEPS,
+    transcription="direct_collocation",
+    compile_backend="jax",
+    # optimizer_method="ipopt",
+    solve_disp=PRINT_SOLVE_REPORT,
+    optimizer_options={
+        "disp": SCIPY_DISP,
+        "maxiter": 500,
+        "ftol": 1e-1,
+    },
 )
 
-traj = planner.compute_solution()
-
-
+traj = planner.solve().trajectory
 planner.plot_solution(signals=("x", "u"))
 sys.traj = traj
 # sys.animate(renderer="meshcat")

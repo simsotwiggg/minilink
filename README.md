@@ -5,8 +5,8 @@ visualizing dynamical systems.
 
 ![diagram](https://github.com/user-attachments/assets/b5c2c740-ae0b-42ab-afba-e90f2dd92a26)
 
-Start here: [showcase notebook](examples/notebooks/demo_showcase.ipynb) ·
-[compile → evaluator intro](examples/notebooks/demo_compile_evaluator.ipynb) ·
+Start here: [showcase](examples/notebooks/showcase/minilink.ipynb) ·
+[JAX / autodiff showcase](examples/notebooks/showcase/jax.ipynb) ·
 [notebooks folder](examples/notebooks/README.md) ·
 [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/alx87grd/minilink/tree/main/examples/notebooks)
 
@@ -146,18 +146,38 @@ loss_and_grad = jax.jit(jax.value_and_grad(
 
 ### Hybrid and discrete control
 
-Discrete control laws (like digital MPC or sampled Sliding Mode Control) can close the loop on continuous plants without breaking the continuous-time core or solver guarantees. `StepSystem` defines discrete logic, and `Computer` schedules it. The `%` and `@` operators build a `HybridDiagram` with Zero-Order Hold (ZOH) and sampling:
+Discrete control laws (like digital MPC or sampled Sliding Mode Control) can close
+the loop on continuous plants without breaking the continuous-time core or solver
+guarantees. The hybrid stack has three pieces:
+
+1. **`StepSystem`** — discrete leaf (tick logic). Wire several into a
+   **`StepDiagramSystem`** when the discrete side needs its own diagram.
+2. **`Computer`** — schedules that step side (`block % dt` or `as_computer`).
+3. **`HybridDiagram`** — `Computer @ plant` (or `mpc @ plant`) with Zero-Order Hold
+   and sampling; the continuous plant is solved between ticks.
 
 ```python
-from minilink.planning.mpc.controller import MPCStatelessController
+from minilink.control.mpc import ModelPredictiveController
 
 # controller is a discrete leaf; plant is a continuous DynamicSystem
-controller = MPCStatelessController(planner, ...)
-computer = controller % 0.1  # schedule to tick every 0.1s
-diagram = computer @ plant   # wire via hybrid ZOH/sample boundaries
+mpc = ModelPredictiveController(planner, dt_mpc=0.1, warm_start=True)
+diagram = mpc @ plant  # schedule + hybrid ZOH/sample wiring
 
 diagram.compute_trajectory(tf=10.0)  # solves the plant exactly between ticks
 diagram.animate()
+```
+
+With ``compile_backend='numpy'`` on the planner (no JAX install), MPC rebuilds the
+NLP each replan tick — see ``examples/scripts/mpc/demo_mpc_minimal_numpy.py``.
+
+Hand-loop or external deploy node (ROS-agnostic — no ROS2 package in minilink):
+
+```python
+cmd = mpc.compute_command(y, t=t_wall)  # replan tick → Command
+u = cmd.u_ff
+meta = mpc.get_solve_metadata()         # success / cost / solve_time_s
+# or: cmd.metadata  (same SolveMetadata)
+mpc.reset()                             # clear deploy counter + latch
 ```
 
 ### Analyze and design
@@ -219,10 +239,6 @@ import numpy as np
 from minilink.core.costs import QuadraticCost
 from minilink.dynamics.catalog.pendulum.cartpole import CartPole
 from minilink.planning.problems import PlanningProblem
-from minilink.planning.trajectory_optimization.direct_collocation import (
-    DirectCollocationOptions,
-    DirectCollocationTranscription,
-)
 from minilink.planning.trajectory_optimization.planner import (
     TrajectoryOptimizationPlanner,
 )
@@ -237,14 +253,14 @@ problem = PlanningProblem(
     x_start=np.array([-2.0, 1.0, 0.0, 0.0]),
     x_goal=x_goal,
     cost=QuadraticCost.from_system(sys, Q=np.diag([1.0, 1.0, 0.0, 0.0]), xbar=x_goal),
+    tf=5.0,
 )
 planner = TrajectoryOptimizationPlanner(
     problem,
-    transcription=DirectCollocationTranscription(
-        DirectCollocationOptions(tf=5.0, n_steps=50)
-    ),
+    n_steps=50,
+    transcription="direct_collocation",
 )
-traj = planner.compute_solution()
+traj = planner.solve().trajectory
 sys.animate(traj)
 ```
 
@@ -342,16 +358,11 @@ required for writing model equations.
 
 ## Testing
 
-Use the **`minilink`** conda env above for local development and agent verification.
-From repo root:
+Use the **`minilink`** conda env above. **Entry points:** [tests/README.md#entry-points](tests/README.md#entry-points).
 
-```bash
-conda activate minilink
-python -m pytest
-```
+**Human (IDE):** open [`tests/run/run_contract_tests.py`](tests/run/run_contract_tests.py) and click **Run**.
 
-For the full suite including optional backends and headless pygame smoke tests,
-see [tests/README.md](tests/README.md).
+**Agent / CI:** [tests/README.md#entry-points](tests/README.md#entry-points).
 
 ## Call chains
 
@@ -370,7 +381,7 @@ control: `DiagramSystem.add_subsystem(...)` / `connect(...)`, `Simulator`, or
 | --- | --- |
 | `core` | `System`, façade mixins (`SharedSystemFacades`, `DynamicSystemFacades`, `StepSystemFacades`), `DiagramSystem`, ports, `Trajectory`, sets, costs |
 | `blocks` | generic wiring blocks (sources, `Integrator`, `TransferFunction`, routing, nonlinear, filters, neural) |
-| `control` | control laws and design factories (`FilteredController`, `ProportionalController`, `StateFeedbackController`, `lqr`, `modelbased`, `robotic`) |
+| `control` | control laws and design factories (`FilteredController`, `ProportionalController`, `StateFeedbackController`, `lqr`, `modelbased`, `robotic`, `mpc`) |
 | `analysis` | `linearize`, `structural`, `equilibria`, `modal` (`modal_analysis`, `animate_modal`) |
 | `core/compile` | `ExecutionPlan`, `DynamicsEvaluator` |
 | `simulation` | `Simulator`, `HybridSimulator`, `Computer`, solvers, time grids |
@@ -405,8 +416,9 @@ Animate:   animate* / render / game  →  Animator  →  renderer backend
            HybridDiagram.animate  →  plant geometry + fine plant traj
            planner.plot_solution / animate_solution  →  problem.sys.*
 
-Trajopt:   PlanningProblem + Transcription + TrajectoryOptimizationPlanner
-           → transcribe → MathematicalProgram → Optimizer → Trajectory
+Trajopt:   PlanningProblem + TrajectoryOptimizationPlanner
+           (flat ``n_steps`` / ``transcription="…"``; optional Transcription)
+           → transcribe → MathematicalProgram → Optimizer → TrajectoryPlan
 
 NLP:       MathematicalProgram → Optimizer → OptimizationResult
 ```
@@ -422,34 +434,37 @@ NLP:       MathematicalProgram → Optimizer → OptimizationResult
 
 | Interest | Start here |
 | --- | --- |
-| Feature tour | [examples/notebooks/demo_showcase.ipynb](examples/notebooks/demo_showcase.ipynb) |
-| Compile → evaluator → fast dynamics primitives | [examples/notebooks/demo_compile_evaluator.ipynb](examples/notebooks/demo_compile_evaluator.ipynb) |
-| Extended tour | [examples/notebooks/demo_overview.ipynb](examples/notebooks/demo_overview.ipynb) |
-| Diagrams | `examples/scripts/diagrams/` |
-| Step (discrete leaf, `compute_rollout`) | `examples/scripts/step/` |
-| Hybrid (scheduled computer + continuous plant) | `examples/scripts/hybrid/demo_hybrid_multi_rate.py` |
-| Minimal hybrid MPC warm-start (`mpc % dt` then `computer @ plant`) | `examples/scripts/hybrid/demo_mpc_hybrid_minimal.py` |
-| Minimal hybrid MPC track + obstacles (warm-start, `mpc % dt`) | `examples/scripts/hybrid/demo_mpc_hybrid_track_lap.py` · [notebook](examples/notebooks/demo_mpc_hybrid_track_lap.ipynb) |
+| Feature tour (marketing) | [examples/notebooks/showcase/minilink.ipynb](examples/notebooks/showcase/minilink.ipynb) |
+| Stateless / JAX / autodiff (marketing) | [examples/notebooks/showcase/jax.ipynb](examples/notebooks/showcase/jax.ipynb) |
+| Module API intros | [examples/notebooks/intro/](examples/notebooks/intro/) (`00_core` … `10_graphical`) |
+| Compile → evaluator API | [examples/notebooks/intro/07_compile.ipynb](examples/notebooks/intro/07_compile.ipynb) |
+| Diagrams | `examples/scripts/diagrams/` · [intro/core](examples/notebooks/intro/00_core.ipynb) |
+| Step (discrete leaf, `compute_rollout`) | `examples/scripts/step/` · [intro/hybrid](examples/notebooks/intro/06_hybrid.ipynb) |
+| Hybrid (scheduled computer + continuous plant) | `examples/scripts/hybrid/demo_hybrid_multi_rate.py` · [intro/hybrid](examples/notebooks/intro/06_hybrid.ipynb) |
+| Minimal MPC (`ModelPredictiveController` + `mpc @ plant`) | `examples/scripts/mpc/demo_mpc_minimal.py` |
+| NumPy MPC (rebuild each tick, no JAX) | `examples/scripts/mpc/demo_mpc_minimal_numpy.py` |
+| Dual-rate MPC (`dual_rate_computer` + `u_nom`) | `examples/scripts/mpc/demo_mpc_dual_rate.py` |
+| Path MPC (dual-rate manual deploy / ROS2-style loop) | `examples/scripts/mpc/demo_mpc_path.py` |
+| Circuit MPC full stack (scene → cost → plan → hybrid) | `examples/scripts/mpc/demo_mpc_circuit.py` · [notebook](examples/notebooks/applications/mpc.ipynb) |
+| Slalom MPC (straight lane + staggered obstacles) | `examples/scripts/mpc/demo_mpc_slalom.py` |
+| Spatial MPC assemble (fields → `PlanningProblem`) | `examples/scripts/mpc/demo_mpc_spatial.py` |
 | Pyro SMC continuous (pendulum) | `examples/scripts/control/demo_sliding_mode_pendulum.py` |
 | Pyro SMC continuous vs hybrid (pendulum) | `examples/scripts/hybrid/demo_smc_pendulum_compare.py` |
-| Hybrid MPC straight-line warm-start (`MPCStatefulController`; `STEP_DISP=True`; set `USE_WARM_START=False` for stateless 6a) | `examples/scripts/hybrid/demo_dynamic_bicycle_rate_mpc_straight_line.py` |
-| Hybrid MPC closed-loop lap (compact track + obstacles) | `examples/scripts/hybrid/demo_dynamic_bicycle_rate_mpc_closed_loop_lap.py` |
-| Blocks (routing, filters, nonlinear) | `examples/scripts/blocks/` |
-| Control | `examples/scripts/control/` |
+| Blocks (routing, filters, nonlinear) | `examples/scripts/blocks/` · [intro/blocks](examples/notebooks/intro/01_blocks.ipynb) |
+| Control | `examples/scripts/control/` · [intro/control](examples/notebooks/intro/03_control.ipynb) |
 | Robotic (impedance, computed torque, kinematic/nullspace, IK) | `examples/scripts/robotic/` |
-| Analysis (linearize, trim, ctrb/obsv, modal) | `examples/scripts/analysis/` |
+| Analysis (linearize, trim, ctrb/obsv, modal) | `examples/scripts/analysis/` · [intro/analysis](examples/notebooks/intro/04_analysis.ipynb) |
 | State-space / LQR | `examples/scripts/statespace/` |
 | Identification (param gradients) | `examples/scripts/identification/` |
-| Plotting | `examples/scripts/plots/` |
-| Animation | `examples/scripts/animation/` |
-| Optimization | `examples/scripts/optimization/` |
-| Planning (RRT, DP, corridor trajopt) | `examples/scripts/planning/` |
-| MPC (rate-MPC bicycle demos; compile-once `MPCPlanner`; legacy per-step trajopt: `demo_dynamic_bicycle_rate_mpc_straight_line_trajopt.py`; obstacle preset: `demo_dynamic_bicycle_rate_mpc_obstacle.py [small\|large]`; spatial scene guide: `demo_mpc_spatial_scene_guide.py`) | `examples/scripts/mpc/` · [spatial scene notebook](examples/notebooks/demo_mpc_spatial_scene_guide.ipynb) |
-| Trajectory optimization | `examples/scripts/trajectory_optimization/` · [notebook](examples/notebooks/demo_bicycle_trajopt_obstacle_scene_compare.ipynb) · [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/alx87grd/minilink/blob/main/examples/notebooks/demo_bicycle_trajopt_obstacle_scene_compare.ipynb) |
+| Plotting | `examples/scripts/plots/` · [intro/graphical](examples/notebooks/intro/10_graphical.ipynb) |
+| Animation | `examples/scripts/animation/` · [intro/graphical](examples/notebooks/intro/10_graphical.ipynb) |
+| Optimization | `examples/scripts/optimization/` · [intro/optimization](examples/notebooks/intro/08_optimization.ipynb) |
+| Planning (RRT, DP, corridor trajopt) | `examples/scripts/planning/` · [intro/planning](examples/notebooks/intro/09_planning.ipynb) |
+| Trajectory optimization | `examples/scripts/trajectory_optimization/` · [car TrajOpt compare](examples/notebooks/applications/car_trajopt.ipynb) · [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/alx87grd/minilink/blob/main/examples/notebooks/applications/car_trajopt.ipynb) |
 | Symbolic mechanics | `examples/scripts/symbolic/` |
 | Physics engine | `examples/scripts/engine/` |
 | C export (P controller round-trip; filtered PID leaf) | `examples/scripts/interfaces/demo_c_export_proportional.py` · `demo_c_export.py` |
-| Solver benchmarks | [examples/notebooks/simulation_benchmark.ipynb](examples/notebooks/simulation_benchmark.ipynb) (uses repo-root `benchmarks/`) |
+| Solver benchmarks | [examples/notebooks/tooling/benchmark.ipynb](examples/notebooks/tooling/benchmark.ipynb) (uses repo-root `benchmarks/`) |
 
 Catalog plants live under `minilink.dynamics.catalog.*`.
 

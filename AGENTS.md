@@ -13,11 +13,23 @@ Keep math readable, interfaces thin, and docs synchronized with code.
 | [README.md](README.md) | User workflows, install, examples table |
 | [DESIGN.md](DESIGN.md) | Public contracts, package layout, evaluator behavior |
 | [ROADMAP.md](ROADMAP.md) | TRL / maturity claims, priority checkboxes |
-
+| [docs/plans/](docs/plans/) | Active design backlog only (delete finished plan docs) |
 | [docs/plans/pyro-port-remaining.md](docs/plans/pyro-port-remaining.md) | Pyro parity rows when library or demos land |
-| [tests/README.md](tests/README.md) | Marker policy, test philosophy |
+| [tests/README.md](tests/README.md) | Marker policy, test philosophy, **entry points (human · agent · CI)** |
 
 Do not add new markdown guides unless asked. Keep [README call chains](README.md#call-chains) minimal.
+
+**Intro-doc scope:** [README.md](README.md), marketing showcases
+([showcase/minilink.ipynb](examples/notebooks/showcase/minilink.ipynb),
+[showcase/jax.ipynb](examples/notebooks/showcase/jax.ipynb)), and the
+[`intro/`](examples/notebooks/intro/) module API notebooks present the **main
+core tools and features** — `System` / diagrams / simulate / compile / analysis /
+planning trajopt / the hybrid step path (`StepSystem`, `StepDiagramSystem`,
+`Computer`, `HybridDiagram`) / MPC as the hybrid exemplar. Do **not** update those
+intro surfaces to track every new demo, compare script, or `examples/projects/`
+experiment. New demos land under `examples/`; update DESIGN/ROADMAP when contracts
+or maturity change. Add a README examples-table row only when a demo is a
+**canonical** teaching entry for a core tool (e.g. `demo_mpc_minimal`).
 
 ## Core directives
 
@@ -87,15 +99,20 @@ Details in [DESIGN.md](DESIGN.md).
 
 **Scope:** stop and explain the smallest slice if a small request grows large. For larger work, write a concise plan and wait for approval. Chat conflicts with this file → ask before proceeding.
 
-**Notebooks:** skip review unless updating renamed imports or user asks; outputs stripped by pre-commit (`nbstripout`).
+**Notebooks:** skip review unless updating renamed imports or user asks; outputs
+stripped by pre-commit (`nbstripout`). After notebook edits, smoke-check with
+`MPLBACKEND=Agg python tests/demo_checks/run_notebook_checks.py` (CI
+``regression`` job runs the same).
 
 Demos: flat under `examples/scripts/`, runnable from repo root.
 
 ## Before push or PR (local CI gate)
 
-GitHub **CI** (`.github/workflows/test.yml`) runs exactly: `ruff check .`, `ruff format --check .`, `pytest` on Python 3.10–3.13. Run the same checks **locally before push or PR** so CI does not fail on lint/format — do **not** poll GitHub Actions after every small commit unless the user asked you to push or verify remote CI.
+**Entry points:** [tests/README.md#entry-points](tests/README.md#entry-points) — humans use **`tests/run/`** (IDE Run); agents and CI use the CLI table in that doc.
 
-**Always before push** (fast; mirrors CI lint steps):
+GitHub **CI** (`.github/workflows/test.yml`) runs exactly: `ruff check .`, `ruff format --check .`, `pytest` on Python 3.10–3.13, then the **`regression`** job (regression gates + flagship demos + notebook smoke with JAX). Run the same checks **locally before push or PR** so CI does not fail on lint/format — do **not** poll GitHub Actions after every small commit unless the user asked you to push or verify remote CI.
+
+**Always before push** (fast; mirrors CI `test` job):
 
 ```bash
 conda activate minilink
@@ -105,24 +122,27 @@ ruff format --check .
 
 Fix with `ruff check --fix .` and `ruff format .` when either fails. CI runs these on the **whole repo**, not only touched files.
 
-**Pytest — proportionate** (same command CI uses; scope by change):
+**Pytest — proportionate** (same command CI `test` job uses; scope by change):
 
 | Change | Run |
 | --- | --- |
 | Docs/markdown only | skip pytest |
-| Narrow module + tests already updated | `pytest path/to/test_foo.py` |
+| Narrow module + tests already updated | `pytest tests/unittest/test_<domain>.py` |
 | Cross-cutting or before handoff/push | `pytest` |
-| Compile backend, simulator, or trajopt changes (big review pass) | `python benchmarks/run_regression_check.py --suite all` |
+| Compile backend, simulator, or trajopt changes (big review pass) | Regression gates: `PYTHONPATH=. python benchmarks/run_regression_check.py --suite all --tiny --factor 10 --speed-gate-suffixes solve_s,nlp_s,speedup` |
+| Teaching notebooks | `MPLBACKEND=Agg python tests/demo_checks/run_notebook_checks.py` |
 
-Optional extras (not required every push): `SDL_VIDEODRIVER=dummy pytest` for pygame smoke; `sphinx-build` only when editing `docs/` (separate Docs workflow).
+Regression gates full command and CI `regression` job flags: [tests/README.md#entry-points](tests/README.md#entry-points).
+
+Optional extras (not required every push): `SDL_VIDEODRIVER=dummy pytest` for headless pygame; `sphinx-build` only when editing `docs/` (separate Docs workflow).
 
 **After push:** only check GitHub CI when the user asked to push, open a PR, or debug a reported failure — not as a routine step on every edit.
 
 ## Verification
 
-Use conda env **`minilink`** from [environment.yml](environment.yml); setup in [README.md#install](README.md#install) (`PYTHONPATH` = repo root).
+Use conda env **`minilink`** from [environment.yml](environment.yml); setup in [README.md#install](README.md#install) (`PYTHONPATH` = repo root). **Test entry points:** [tests/README.md#entry-points](tests/README.md#entry-points).
 
-After substantial changes: `pytest` (proportionate to risk), ruff on touched Python, smoke scripts when user-facing. JAX twin plants: nominal + nontrivial parameter test. Headless: `MPLBACKEND=Agg`; full suite notes in [tests/README.md](tests/README.md).
+After substantial changes: `pytest` (proportionate to risk), ruff on touched Python, demo-check scripts when user-facing. JAX twin plants: nominal + nontrivial parameter test. Headless: `MPLBACKEND=Agg`; full suite notes in [tests/README.md](tests/README.md).
 
 **Big review pass** (compile backend, `Simulator`, trajectory optimization, or cross-cutting dynamics changes): run the committed regression baselines before handoff:
 
@@ -142,5 +162,5 @@ Final pass after substantial changes — smaller, clearer diff:
 4. Fold or update examples; runnable from repo root.
 5. Sync README (user API), DESIGN (contracts), ROADMAP (maturity if changed).
 6. Tests for new behavior; benchmarks only when performance claims matter.
-7. Verify: **pre-push gate** (ruff + pytest per table above); headless graphics smoke when relevant.
+7. Verify: **pre-push gate** (ruff + pytest per table above); headless graphics checks when relevant.
 8. Handoff: clean `git status`, short summary of changes and verification; run ruff before push if committing.
